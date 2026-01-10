@@ -69,9 +69,9 @@ class ChatUI:
     """Chat UI with fixed layout."""
 
     # Layout constants
-    HEADER_LINES = 3      # Header + status + blank line
-    INPUT_LINES = 2       # Separator + input line
-    MIN_MESSAGE_LINES = 5 # Minimum space for messages
+    HEADER_LINES = 3  # Header + status + blank line
+    INPUT_LINES = 2  # Separator + input line
+    MIN_MESSAGE_LINES = 5  # Minimum space for messages
 
     def __init__(self, session: ChatSession):
         self.session = session
@@ -90,8 +90,10 @@ class ChatUI:
 
         # Token count if any
         stats = self.session.get_token_stats()
-        if stats['total_tokens'] > 0:
-            header.append(f"  {stats['total_tokens']:,} tokens", style=f"dim {THEME['muted']}")
+        if stats["total_tokens"] > 0:
+            header.append(
+                f"  {stats['total_tokens']:,} tokens", style=f"dim {THEME['muted']}"
+            )
 
         self.console.print(header)
         self.console.print()
@@ -111,7 +113,9 @@ class ChatUI:
         welcome.append("How can I help you today?", style="dim")
         self.console.print(welcome)
         self.console.print()
-        self.console.print(f"[dim {THEME['muted']}]Type a message to start chatting, or /help for commands.[/]")
+        self.console.print(
+            f"[dim {THEME['muted']}]Type a message to start chatting, or /help for commands.[/]"
+        )
 
     def _print_messages(self, max_lines: int):
         """Print conversation messages within line limit."""
@@ -133,22 +137,23 @@ class ChatUI:
 
         # Print messages that fit
         for msg in self.messages[start_idx:]:
-            if msg["role"] == "user":
-                # User message with "You" label
-                label = Text()
-                label.append("You", style=f"bold {THEME['primary']}")
-                self.console.print(label)
-                self.console.print(f"  {msg['content']}")
-                self.console.print()
-            elif msg["role"] == "assistant":
-                # Assistant message with app name label
-                label = Text()
-                label.append(APP_NAME, style=f"bold {THEME['assistant']}")
-                self.console.print(label)
-                # Indent the markdown content slightly
-                md = Markdown(msg["content"])
-                self.console.print(md)
-                self.console.print()
+            match msg["role"]:
+                case "user":
+                    # User message with "You" label
+                    label = Text()
+                    label.append("You", style=f"bold {THEME['primary']}")
+                    self.console.print(label)
+                    self.console.print(f"  {msg['content']}")
+                    self.console.print()
+                case "assistant":
+                    # Assistant message with app name label
+                    label = Text()
+                    label.append(APP_NAME, style=f"bold {THEME['assistant']}")
+                    self.console.print(label)
+                    # Indent the markdown content slightly
+                    md = Markdown(msg["content"])
+                    self.console.print(md)
+                    self.console.print()
 
     def _print_input_area(self):
         """Print the input separator."""
@@ -238,7 +243,9 @@ class TutorialUI:
         header.append(" Tutorial", style="bold")
 
         # Show provider and model
-        provider_name = PROVIDERS.get(self.session.provider, {}).get("name", self.session.provider)
+        provider_name = PROVIDERS.get(self.session.provider, {}).get(
+            "name", self.session.provider
+        )
         header.append("  ", style="dim")
         header.append(f"{self.session.model}", style=f"dim {THEME['muted']}")
         header.append(f" ({provider_name})", style=f"dim {THEME['muted']}")
@@ -291,10 +298,12 @@ class TutorialUI:
     def generate_tutorial(self, topic: str) -> tuple[bool, str]:
         """Generate a new tutorial with loading indicator."""
         self.console.print()
-        self.console.print(f"[{THEME['primary']}]Generating tutorial:[/] [bold]{topic}[/]")
+        self.console.print(
+            f"[{THEME['primary']}]Generating tutorial:[/] [bold]{topic}[/]"
+        )
 
         with Status(
-            f"[dim]Creating chapters...[/]",
+            "[dim]Creating chapters...[/]",
             console=self.console,
             spinner="dots",
         ):
@@ -305,10 +314,12 @@ class TutorialUI:
     def generate_more(self, num_chapters: int = 3) -> tuple[bool, str]:
         """Generate additional chapters with loading indicator."""
         self.console.print()
-        self.console.print(f"[{THEME['primary']}]Generating {num_chapters} more chapters...[/]")
+        self.console.print(
+            f"[{THEME['primary']}]Generating {num_chapters} more chapters...[/]"
+        )
 
         with Status(
-            f"[dim]Creating additional content...[/]",
+            "[dim]Creating additional content...[/]",
             console=self.console,
             spinner="dots",
         ):
@@ -362,210 +373,220 @@ def tutorial_main():
             command = parts[0].lower()
             args = parts[1] if len(parts) > 1 else ""
 
-            if command in ("/quit", "/exit", "/q"):
-                console.print()
-                console.print("[dim]Goodbye![/]")
-                console.print()
-                break
+            match command:
+                case "/quit" | "/exit" | "/q":
+                    console.print()
+                    console.print("[dim]Goodbye![/]")
+                    console.print()
+                    break
+                case "/help":
+                    print_tutorial_help()
 
-            elif command == "/help":
-                print_tutorial_help()
-
-            elif command == "/topic":
-                if args:
-                    success, error = ui.generate_tutorial(args)
-                    if success:
-                        ui.refresh()
-                    else:
-                        print_error(f"Failed to generate tutorial: {error}")
-                else:
-                    topic = Prompt.ask(f"[{THEME['muted']}]Enter topic[/]")
-                    if topic:
-                        success, error = ui.generate_tutorial(topic)
+                case "/topic":
+                    if args:
+                        success, error = ui.generate_tutorial(args)
                         if success:
                             ui.refresh()
                         else:
                             print_error(f"Failed to generate tutorial: {error}")
-
-            elif command == "/chapters":
-                if session.has_tutorial():
-                    choice = ui.prompt_chapter_selection()
-                    if choice is not None and session.go_to_chapter(choice):
-                        ui.refresh()
-                else:
-                    print_info("No tutorial loaded. Enter a topic to start.")
-
-            elif command == "/next":
-                if session.has_tutorial():
-                    if session.next_chapter():
-                        ui.refresh()
                     else:
-                        print_info("You're at the last chapter.")
-                else:
-                    print_info("No tutorial loaded. Enter a topic to start.")
+                        topic = Prompt.ask(f"[{THEME['muted']}]Enter topic[/]")
+                        if topic:
+                            success, error = ui.generate_tutorial(topic)
+                            if success:
+                                ui.refresh()
+                            else:
+                                print_error(f"Failed to generate tutorial: {error}")
 
-            elif command == "/prev":
-                if session.has_tutorial():
-                    if session.prev_chapter():
-                        ui.refresh()
+                case "/chapters":
+                    if session.has_tutorial():
+                        choice = ui.prompt_chapter_selection()
+                        if choice is not None and session.go_to_chapter(choice):
+                            ui.refresh()
                     else:
-                        print_info("You're at the first chapter.")
-                else:
-                    print_info("No tutorial loaded. Enter a topic to start.")
+                        print_info("No tutorial loaded. Enter a topic to start.")
 
-            elif command == "/goto":
-                if session.has_tutorial():
-                    try:
-                        chapter_num = int(args)
-                        if session.go_to_chapter(chapter_num - 1):
+                case "/next":
+                    if session.has_tutorial():
+                        if session.next_chapter():
                             ui.refresh()
                         else:
-                            print_error(f"Invalid chapter. Use 1-{session.tutorial.chapter_count}")
-                    except ValueError:
-                        print_error("Please provide a valid chapter number.")
-                else:
-                    print_info("No tutorial loaded. Enter a topic to start.")
-
-            elif command == "/refresh":
-                ui.refresh()
-
-            elif command == "/more":
-                if session.has_tutorial():
-                    # Parse optional number of chapters
-                    num = 3
-                    if args:
-                        try:
-                            num = int(args)
-                            num = max(1, min(num, 5))  # Clamp between 1-5
-                        except ValueError:
-                            pass
-
-                    success, error = ui.generate_more(num)
-                    if success:
-                        ui.refresh()
-                        print_success(f"Added {num} new chapters!")
+                            print_info("You're at the last chapter.")
                     else:
-                        print_error(f"Failed to generate more chapters: {error}")
-                else:
-                    print_info("No tutorial loaded. Enter a topic first.")
+                        print_info("No tutorial loaded. Enter a topic to start.")
 
-            elif command == "/chat":
-                # Enter chat mode within tutorial (uses same provider/model)
-                console.print()
-                console.print(f"[bold]Chat Mode[/] [dim](type /back to return to tutorial)[/]")
-                console.print()
+                case "/prev":
+                    if session.has_tutorial():
+                        if session.prev_chapter():
+                            ui.refresh()
+                        else:
+                            print_info("You're at the first chapter.")
+                    else:
+                        print_info("No tutorial loaded. Enter a topic to start.")
 
-                chat_session = ChatSession(
-                    model=session.model,
-                    provider=session.provider,
-                )
+                case "/goto":
+                    if session.has_tutorial():
+                        try:
+                            chapter_num = int(args)
+                            if session.go_to_chapter(chapter_num - 1):
+                                ui.refresh()
+                            else:
+                                print_error(
+                                    f"Invalid chapter. Use 1-{session.tutorial.chapter_count}"
+                                )
+                        except ValueError:
+                            print_error("Please provide a valid chapter number.")
+                    else:
+                        print_info("No tutorial loaded. Enter a topic to start.")
 
-                while True:
-                    try:
-                        console.print(f"[{THEME['primary']}]>[/] ", end="")
-                        chat_input = input().strip()
-                    except (KeyboardInterrupt, EOFError):
-                        ui.refresh()
-                        break
+                case "/refresh":
+                    ui.refresh()
 
-                    if not chat_input:
-                        continue
+                case "/more":
+                    if session.has_tutorial():
+                        # Parse optional number of chapters
+                        num = 3
+                        if args:
+                            try:
+                                num = int(args)
+                                num = max(1, min(num, 5))  # Clamp between 1-5
+                            except ValueError:
+                                pass
 
-                    if chat_input.lower() in ("/back", "/exit"):
-                        ui.refresh()
-                        break
+                        success, error = ui.generate_more(num)
+                        if success:
+                            ui.refresh()
+                            print_success(f"Added {num} new chapters!")
+                        else:
+                            print_error(f"Failed to generate more chapters: {error}")
+                    else:
+                        print_info("No tutorial loaded. Enter a topic first.")
 
-                    # Get response from chat
-                    chat_session.add_user_msg(chat_input)
+                case "/chat":
+                    # Enter chat mode within tutorial (uses same provider/model)
+                    console.print()
+                    console.print(
+                        "[bold]Chat Mode[/] [dim](type /back to return to tutorial)[/]"
+                    )
                     console.print()
 
-                    try:
-                        stream = chat_session.client.chat.completions.create(
-                            model=chat_session.model,
-                            stream=True,
-                            messages=chat_session.messages,
-                        )
-
-                        full_response = ""
-                        with Live(console=console, refresh_per_second=12, transient=False) as live:
-                            for chunk in stream:
-                                if chunk.choices[0].delta.content is not None:
-                                    full_response += chunk.choices[0].delta.content
-                                    live.update(Markdown(full_response))
-
-                        console.print()
-                        chat_session.add_assistant_message(full_response)
-                    except Exception as e:
-                        chat_session.messages.pop()
-                        print_error(f"API Error: {e}")
-
-            elif command == "/models":
-                print_models(session.model, session.provider)
-
-                # Get available models based on provider
-                if session.provider == "ollama":
-                    models = get_ollama_models()
-                else:
-                    models = list(OPENAI_MODELS.keys())
-
-                if models:
-                    new_model = Prompt.ask(
-                        f"[{THEME['muted']}]Select model[/]",
-                        default=session.model,
+                    chat_session = ChatSession(
+                        model=session.model,
+                        provider=session.provider,
                     )
-                    if new_model in models:
-                        session.model = new_model
-                        ui.refresh()
-                        print_success(f"Model changed to {new_model}")
-                    elif new_model != session.model:
-                        print_error(f"Model not found: {new_model}")
 
-            elif command == "/provider":
-                print_providers(session.provider)
+                    while True:
+                        try:
+                            console.print(f"[{THEME['primary']}]>[/] ", end="")
+                            chat_input = input().strip()
+                        except (KeyboardInterrupt, EOFError):
+                            ui.refresh()
+                            break
 
-                new_provider = Prompt.ask(
-                    f"[{THEME['muted']}]Select provider[/]",
-                    choices=list(PROVIDERS.keys()),
-                    default=session.provider,
-                )
+                        if not chat_input:
+                            continue
 
-                if new_provider != session.provider:
-                    # Check for API key if switching to OpenAI
-                    if new_provider == "openai" and not get_openai_api_key():
-                        print_error("OpenAI API key not set. Use /apikey to set it first.")
+                        if chat_input.lower() in ("/back", "/exit"):
+                            ui.refresh()
+                            break
+
+                        # Get response from chat
+                        chat_session.add_user_msg(chat_input)
+                        console.print()
+
+                        try:
+                            stream = chat_session.client.chat.completions.create(
+                                model=chat_session.model,
+                                stream=True,
+                                messages=chat_session.messages,
+                            )
+
+                            full_response = ""
+                            with Live(
+                                console=console, refresh_per_second=12, transient=False
+                            ) as live:
+                                for chunk in stream:
+                                    if chunk.choices[0].delta.content is not None:
+                                        full_response += chunk.choices[0].delta.content
+                                        live.update(Markdown(full_response))
+
+                            console.print()
+                            chat_session.add_assistant_message(full_response)
+                        except Exception as e:
+                            chat_session.messages.pop()
+                            print_error(f"API Error: {e}")
+
+                case "/models":
+                    print_models(session.model, session.provider)
+
+                    # Get available models based on provider
+                    if session.provider == "ollama":
+                        models = get_ollama_models()
                     else:
-                        # Set default model for the provider
-                        if new_provider == "ollama":
-                            models = get_ollama_models()
-                            default_model = models[0] if models else "llama3.2"
+                        models = list(OPENAI_MODELS.keys())
+
+                    if models:
+                        new_model = Prompt.ask(
+                            f"[{THEME['muted']}]Select model[/]",
+                            default=session.model,
+                        )
+                        if new_model in models:
+                            session.model = new_model
+                            ui.refresh()
+                            print_success(f"Model changed to {new_model}")
+                        elif new_model != session.model:
+                            print_error(f"Model not found: {new_model}")
+
+                case "/provider":
+                    print_providers(session.provider)
+
+                    new_provider = Prompt.ask(
+                        f"[{THEME['muted']}]Select provider[/]",
+                        choices=list(PROVIDERS.keys()),
+                        default=session.provider,
+                    )
+
+                    if new_provider != session.provider:
+                        # Check for API key if switching to OpenAI
+                        if new_provider == "openai" and not get_openai_api_key():
+                            print_error(
+                                "OpenAI API key not set. Use /apikey to set it first."
+                            )
                         else:
-                            default_model = "gpt-4o-mini"
+                            # Set default model for the provider
+                            if new_provider == "ollama":
+                                models = get_ollama_models()
+                                default_model = models[0] if models else "llama3.2"
+                            else:
+                                default_model = "gpt-4o-mini"
 
-                        session.set_provider(new_provider, default_model)
-                        ui.refresh()
-                        print_success(f"Switched to {PROVIDERS[new_provider]['name']}")
+                            session.set_provider(new_provider, default_model)
+                            ui.refresh()
+                            print_success(
+                                f"Switched to {PROVIDERS[new_provider]['name']}"
+                            )
 
-            elif command == "/apikey":
-                console.print()
-                current_key = get_openai_api_key()
-                if current_key:
-                    masked = current_key[:8] + "..." + current_key[-4:]
-                    console.print(f"[dim]Current key: {masked}[/]")
+                case "/apikey":
+                    console.print()
+                    current_key = get_openai_api_key()
+                    if current_key:
+                        masked = current_key[:8] + "..." + current_key[-4:]
+                        console.print(f"[dim]Current key: {masked}[/]")
 
-                new_key = Prompt.ask(
-                    f"[{THEME['muted']}]Enter OpenAI API key[/]",
-                    password=True,
-                )
+                    new_key = Prompt.ask(
+                        f"[{THEME['muted']}]Enter OpenAI API key[/]",
+                        password=True,
+                    )
 
-                if new_key:
-                    set_openai_api_key(new_key)
-                    print_success("API key saved to ~/.janett/config.json")
-                else:
-                    print_info("Cancelled.")
+                    if new_key:
+                        set_openai_api_key(new_key)
+                        print_success("API key saved to ~/.janett/config.json")
+                    else:
+                        print_info("Cancelled.")
 
-            else:
-                print_error(f"Unknown command: {command}")
-                print_info("Type /help for available commands.")
+                case _:
+                    print_error(f"Unknown command: {command}")
+                    print_info("Type /help for available commands.")
 
             continue
 
@@ -595,6 +616,7 @@ def main():
     # Version flag
     if "--version" in sys.argv or "-v" in sys.argv:
         from janett import __version__
+
         print(f"janett {__version__}")
         return
 
@@ -626,7 +648,9 @@ def chat_main():
             stats["messages"] = session.get_message_count()
             console.print()
             if stats["total_tokens"] > 0:
-                console.print(f"[dim]{stats.get('messages', 0)} messages • {stats['total_tokens']:,} tokens • ${stats['total_cost']:.4f}[/]")
+                console.print(
+                    f"[dim]{stats.get('messages', 0)} messages • {stats['total_tokens']:,} tokens • ${stats['total_cost']:.4f}[/]"
+                )
             console.print()
             console.print("[dim]Goodbye.[/]")
             console.print()
@@ -641,97 +665,102 @@ def chat_main():
             command = parts[0].lower()
             args = parts[1] if len(parts) > 1 else ""
 
-            if command in ("/quit", "/exit", "/q"):
-                stats = session.get_token_stats()
-                stats["messages"] = session.get_message_count()
-                console.print()
-                if stats["total_tokens"] > 0:
-                    console.print(f"[dim]{stats.get('messages', 0)} messages • {stats['total_tokens']:,} tokens • ${stats['total_cost']:.4f}[/]")
-                console.print()
-                console.print("[dim]Goodbye.[/]")
-                console.print()
-                break
+            match command:
+                case "/quit" | "/exit" | "/q":
+                    stats = session.get_token_stats()
+                    stats["messages"] = session.get_message_count()
+                    console.print()
+                    if stats["total_tokens"] > 0:
+                        console.print(
+                            f"[dim]{stats.get('messages', 0)} messages • {stats['total_tokens']:,} tokens • ${stats['total_cost']:.4f}[/]"
+                        )
+                    console.print()
+                    console.print("[dim]Goodbye.[/]")
+                    console.print()
+                    break
 
-            elif command == "/help":
-                print_help()
+                case "/help":
+                    print_help()
 
-            elif command == "/clear":
-                console.print()
-                if Confirm.ask(
-                    f"[{THEME['warning']}]Clear conversation history?[/]",
-                    default=False
-                ):
-                    session.clear_history()
-                    ui.clear()
-                    ui.refresh()
-                    print_success("Conversation cleared.")
-                else:
-                    print_info("Cancelled.")
+                case "/clear":
+                    console.print()
+                    if Confirm.ask(
+                        f"[{THEME['warning']}]Clear conversation history?[/]",
+                        default=False,
+                    ):
+                        session.clear_history()
+                        ui.clear()
+                        ui.refresh()
+                        print_success("Conversation cleared.")
+                    else:
+                        print_info("Cancelled.")
 
-            elif command == "/tokens":
-                stats = session.get_token_stats()
-                print_token_stats(stats)
+                case "/tokens":
+                    stats = session.get_token_stats()
+                    print_token_stats(stats)
 
-            elif command == "/model":
-                print_models(session.model)
-                new_model = Prompt.ask(
-                    f"[{THEME['muted']}]Enter model name[/]",
-                    default=session.model
-                )
-                if session.set_model(new_model):
-                    print_success(f"Model changed to {new_model}")
-                    ui.refresh()  # Refresh to show new model
-                else:
-                    print_error(f"Unknown model: {new_model}")
-
-            elif command == "/system":
-                console.print()
-                console.print(f"[{THEME['muted']}]Enter new system prompt (or 'cancel'):[/]")
-                new_prompt = Prompt.ask("[dim]Prompt[/]")
-                if new_prompt.lower() != "cancel" and new_prompt:
-                    session.set_system_prompt(new_prompt)
-                    ui.clear()
-                    ui.refresh()
-                    print_success("System prompt updated.")
-                else:
-                    print_info("Cancelled.")
-
-            elif command == "/save":
-                if not args:
-                    args = Prompt.ask(
-                        f"[{THEME['muted']}]Filename[/]",
-                        default="conversation"
+                case "/model":
+                    print_models(session.model)
+                    new_model = Prompt.ask(
+                        f"[{THEME['muted']}]Enter model name[/]", default=session.model
                     )
-                filepath = session.save_conversation(args)
-                print_success(f"Saved to {filepath}")
+                    if session.set_model(new_model):
+                        print_success(f"Model changed to {new_model}")
+                        ui.refresh()  # Refresh to show new model
+                    else:
+                        print_error(f"Unknown model: {new_model}")
 
-            elif command == "/load":
-                if not args:
+                case "/system":
+                    console.print()
+                    console.print(
+                        f"[{THEME['muted']}]Enter new system prompt (or 'cancel'):[/]"
+                    )
+                    new_prompt = Prompt.ask("[dim]Prompt[/]")
+                    if new_prompt.lower() != "cancel" and new_prompt:
+                        session.set_system_prompt(new_prompt)
+                        ui.clear()
+                        ui.refresh()
+                        print_success("System prompt updated.")
+                    else:
+                        print_info("Cancelled.")
+
+                case "/save":
+                    if not args:
+                        args = Prompt.ask(
+                            f"[{THEME['muted']}]Filename[/]", default="conversation"
+                        )
+                    filepath = session.save_conversation(args)
+                    print_success(f"Saved to {filepath}")
+
+                case "/load":
+                    if not args:
+                        list_saved_conversations()
+                        args = Prompt.ask(f"[{THEME['muted']}]Filename[/]")
+                    if session.load_conversation(args):
+                        # Rebuild UI messages from session
+                        ui.clear()
+                        for msg in session.messages[1:]:  # Skip system message
+                            if msg["role"] == "user":
+                                ui.add_user_message(msg["content"])
+                            elif msg["role"] == "assistant":
+                                ui.add_assistant_message(msg["content"])
+                        ui.refresh()
+                        print_success(f"Loaded: {args}")
+                        print_info(
+                            f"Model: {session.model} | Messages: {session.get_message_count()}"
+                        )
+                    else:
+                        print_error(f"Could not load: {args}")
+
+                case "/list":
                     list_saved_conversations()
-                    args = Prompt.ask(f"[{THEME['muted']}]Filename[/]")
-                if session.load_conversation(args):
-                    # Rebuild UI messages from session
-                    ui.clear()
-                    for msg in session.messages[1:]:  # Skip system message
-                        if msg["role"] == "user":
-                            ui.add_user_message(msg["content"])
-                        elif msg["role"] == "assistant":
-                            ui.add_assistant_message(msg["content"])
+
+                case "/refresh":
                     ui.refresh()
-                    print_success(f"Loaded: {args}")
-                    print_info(f"Model: {session.model} | Messages: {session.get_message_count()}")
-                else:
-                    print_error(f"Could not load: {args}")
 
-            elif command == "/list":
-                list_saved_conversations()
-
-            elif command == "/refresh":
-                ui.refresh()
-
-            else:
-                print_error(f"Unknown command: {command}")
-                print_info("Type /help for available commands.")
+                case _:
+                    print_info("Type /help for available commands.")
+                    print_error(f"Unknown command: {command}")
 
             continue
 
