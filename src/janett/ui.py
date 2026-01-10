@@ -8,9 +8,11 @@ from rich.panel import Panel
 from rich.table import Table
 
 from janett.config import (
-    MODELS,
+    OPENAI_MODELS,
+    PROVIDERS,
     SAVE_DIR,
     THEME,
+    get_ollama_models,
 )
 
 console = Console()
@@ -58,17 +60,48 @@ def print_token_stats(stats: dict):
     console.print()
 
 
-def print_models(current_model: str):
-    """Print available models with minimal styling."""
-    console.print()
-    console.print("[bold]Models[/] [dim](per 1M tokens)[/]")
+def print_models(current_model: str, provider: str = "ollama"):
+    """Print available models for the current provider."""
     console.print()
 
-    for model, info in MODELS.items():
-        if model == current_model:
-            console.print(f"  [bold {THEME['primary']}]{model}[/] [dim]in:${info['input']:.2f} out:${info['output']:.2f} ctx:{info['context']:,}[/] [bold {THEME['success']}]*[/]")
+    if provider == "ollama":
+        models = get_ollama_models()
+        if not models:
+            console.print("[bold]Models[/] [dim](Ollama)[/]")
+            console.print()
+            console.print(f"  [{THEME['error']}]No models found. Is Ollama running?[/]")
+            console.print(f"  [dim]Run: ollama pull llama3.2[/]")
         else:
-            console.print(f"  [dim]{model}[/] [dim]in:${info['input']:.2f} out:${info['output']:.2f} ctx:{info['context']:,}[/]")
+            console.print("[bold]Models[/] [dim](Ollama - Local)[/]")
+            console.print()
+            for model in models:
+                if model == current_model:
+                    console.print(f"  [bold {THEME['primary']}]{model}[/] [bold {THEME['success']}]*[/]")
+                else:
+                    console.print(f"  [dim]{model}[/]")
+    else:
+        console.print("[bold]Models[/] [dim](OpenAI - per 1M tokens)[/]")
+        console.print()
+        for model, info in OPENAI_MODELS.items():
+            if model == current_model:
+                console.print(f"  [bold {THEME['primary']}]{model}[/] [dim]in:${info['input']:.2f} out:${info['output']:.2f}[/] [bold {THEME['success']}]*[/]")
+            else:
+                console.print(f"  [dim]{model}[/] [dim]in:${info['input']:.2f} out:${info['output']:.2f}[/]")
+
+    console.print()
+
+
+def print_providers(current_provider: str):
+    """Print available providers."""
+    console.print()
+    console.print("[bold]Providers[/]")
+    console.print()
+
+    for key, info in PROVIDERS.items():
+        if key == current_provider:
+            console.print(f"  [bold {THEME['primary']}]{key}[/] [dim]{info['name']}[/] [bold {THEME['success']}]*[/]")
+        else:
+            console.print(f"  [dim]{key}[/] [dim]{info['name']}[/]")
 
     console.print()
 
@@ -131,8 +164,12 @@ def print_tutorial_help():
         ("/next", "Go to next chapter"),
         ("/prev", "Go to previous chapter"),
         ("/goto <n>", "Jump to chapter number n"),
+        ("/more [n]", "Generate more chapters (default: 3)"),
         ("/topic <subject>", "Start a new tutorial"),
         ("/chat", "Enter chat mode"),
+        ("/models", "Show and select available models"),
+        ("/provider", "Switch between Ollama and OpenAI"),
+        ("/apikey", "Set OpenAI API key"),
         ("/help", "Show this help message"),
         ("/quit", "Exit the tutorial"),
     ]

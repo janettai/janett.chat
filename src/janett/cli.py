@@ -1,8 +1,34 @@
 """Command-line interface for Janett."""
 
+import atexit
+import readline
 import sys
+from pathlib import Path
 
 from dotenv import load_dotenv
+
+# Setup persistent command history
+HISTORY_FILE = Path.home() / ".janett" / "history"
+
+
+def setup_readline():
+    """Configure readline with persistent history."""
+    HISTORY_FILE.parent.mkdir(exist_ok=True)
+
+    # Load existing history
+    if HISTORY_FILE.exists():
+        try:
+            readline.read_history_file(HISTORY_FILE)
+        except Exception:
+            pass
+
+    # Set history length
+    readline.set_history_length(1000)
+
+    # Save history on exit
+    atexit.register(lambda: readline.write_history_file(HISTORY_FILE))
+
+
 from rich.console import Console
 from rich.live import Live
 from rich.markdown import Markdown
@@ -11,7 +37,15 @@ from rich.status import Status
 from rich.text import Text
 
 from janett.chat import ChatSession
-from janett.config import APP_NAME, THEME
+from janett.config import (
+    APP_NAME,
+    OPENAI_MODELS,
+    PROVIDERS,
+    THEME,
+    get_ollama_models,
+    get_openai_api_key,
+    set_openai_api_key,
+)
 from janett.tutorial import TutorialSession
 from janett.ui import (
     list_saved_conversations,
@@ -21,6 +55,7 @@ from janett.ui import (
     print_help,
     print_info,
     print_models,
+    print_providers,
     print_success,
     print_token_stats,
     print_tutorial_help,
@@ -202,6 +237,12 @@ class TutorialUI:
         header.append(f"{APP_NAME}", style=f"bold {THEME['primary']}")
         header.append(" Tutorial", style="bold")
 
+        # Show provider and model
+        provider_name = PROVIDERS.get(self.session.provider, {}).get("name", self.session.provider)
+        header.append("  ", style="dim")
+        header.append(f"{self.session.model}", style=f"dim {THEME['muted']}")
+        header.append(f" ({provider_name})", style=f"dim {THEME['muted']}")
+
         if self.session.tutorial:
             header.append("  ", style="dim")
             header.append(
@@ -247,7 +288,7 @@ class TutorialUI:
             self.console.print()
             raise
 
-    def generate_tutorial(self, topic: str) -> bool:
+    def generate_tutorial(self, topic: str) -> tuple[bool, str]:
         """Generate a new tutorial with loading indicator."""
         self.console.print()
         self.console.print(f"[{THEME['primary']}]Generating tutorial:[/] [bold]{topic}[/]")
@@ -257,9 +298,23 @@ class TutorialUI:
             console=self.console,
             spinner="dots",
         ):
-            success = self.session.generate_tutorial(topic)
+            success, error = self.session.generate_tutorial(topic)
 
-        return success
+        return success, error
+
+    def generate_more(self, num_chapters: int = 3) -> tuple[bool, str]:
+        """Generate additional chapters with loading indicator."""
+        self.console.print()
+        self.console.print(f"[{THEME['primary']}]Generating {num_chapters} more chapters...[/]")
+
+        with Status(
+            f"[dim]Creating additional content...[/]",
+            console=self.console,
+            spinner="dots",
+        ):
+            success, error = self.session.generate_more_chapters(num_chapters)
+
+        return success, error
 
     def prompt_chapter_selection(self) -> int | None:
         """Show interactive chapter selection prompt."""
@@ -281,6 +336,7 @@ class TutorialUI:
 def tutorial_main():
     """Main entry point for tutorial mode."""
     load_dotenv()
+    setup_readline()
 
     session = TutorialSession()
     ui = TutorialUI(session)
@@ -317,17 +373,19 @@ def tutorial_main():
 
             elif command == "/topic":
                 if args:
-                    if ui.generate_tutorial(args):
+                    success, error = ui.generate_tutorial(args)
+                    if success:
                         ui.refresh()
                     else:
-                        print_error("Failed to generate tutorial. Please try again.")
+                        print_error(f"Failed to generate tutorial: {error}")
                 else:
                     topic = Prompt.ask(f"[{THEME['muted']}]Enter topic[/]")
                     if topic:
-                        if ui.generate_tutorial(topic):
+                        success, error = ui.generate_tutorial(topic)
+                        if success:
                             ui.refresh()
                         else:
-                            print_error("Failed to generate tutorial. Please try again.")
+                            print_error(f"Failed to generate tutorial: {error}")
 
             elif command == "/chapters":
                 if session.has_tutorial():
@@ -371,13 +429,36 @@ def tutorial_main():
             elif command == "/refresh":
                 ui.refresh()
 
+            elif command == "/more":
+                if session.has_tutorial():
+                    # Parse optional number of chapters
+                    num = 3
+                    if args:
+                        try:
+                            num = int(args)
+                            num = max(1, min(num, 5))  # Clamp between 1-5
+                        except ValueError:
+                            pass
+
+                    success, error = ui.generate_more(num)
+                    if success:
+                        ui.refresh()
+                        print_success(f"Added {num} new chapters!")
+                    else:
+                        print_error(f"Failed to generate more chapters: {error}")
+                else:
+                    print_info("No tutorial loaded. Enter a topic first.")
+
             elif command == "/chat":
-                # Enter chat mode within tutorial
+                # Enter chat mode within tutorial (uses same provider/model)
                 console.print()
                 console.print(f"[bold]Chat Mode[/] [dim](type /back to return to tutorial)[/]")
                 console.print()
 
-                chat_session = ChatSession()
+                chat_session = ChatSession(
+                    model=session.model,
+                    provider=session.provider,
+                )
 
                 while True:
                     try:
@@ -418,6 +499,70 @@ def tutorial_main():
                         chat_session.messages.pop()
                         print_error(f"API Error: {e}")
 
+            elif command == "/models":
+                print_models(session.model, session.provider)
+
+                # Get available models based on provider
+                if session.provider == "ollama":
+                    models = get_ollama_models()
+                else:
+                    models = list(OPENAI_MODELS.keys())
+
+                if models:
+                    new_model = Prompt.ask(
+                        f"[{THEME['muted']}]Select model[/]",
+                        default=session.model,
+                    )
+                    if new_model in models:
+                        session.model = new_model
+                        ui.refresh()
+                        print_success(f"Model changed to {new_model}")
+                    elif new_model != session.model:
+                        print_error(f"Model not found: {new_model}")
+
+            elif command == "/provider":
+                print_providers(session.provider)
+
+                new_provider = Prompt.ask(
+                    f"[{THEME['muted']}]Select provider[/]",
+                    choices=list(PROVIDERS.keys()),
+                    default=session.provider,
+                )
+
+                if new_provider != session.provider:
+                    # Check for API key if switching to OpenAI
+                    if new_provider == "openai" and not get_openai_api_key():
+                        print_error("OpenAI API key not set. Use /apikey to set it first.")
+                    else:
+                        # Set default model for the provider
+                        if new_provider == "ollama":
+                            models = get_ollama_models()
+                            default_model = models[0] if models else "llama3.2"
+                        else:
+                            default_model = "gpt-4o-mini"
+
+                        session.set_provider(new_provider, default_model)
+                        ui.refresh()
+                        print_success(f"Switched to {PROVIDERS[new_provider]['name']}")
+
+            elif command == "/apikey":
+                console.print()
+                current_key = get_openai_api_key()
+                if current_key:
+                    masked = current_key[:8] + "..." + current_key[-4:]
+                    console.print(f"[dim]Current key: {masked}[/]")
+
+                new_key = Prompt.ask(
+                    f"[{THEME['muted']}]Enter OpenAI API key[/]",
+                    password=True,
+                )
+
+                if new_key:
+                    set_openai_api_key(new_key)
+                    print_success("API key saved to ~/.janett/config.json")
+                else:
+                    print_info("Cancelled.")
+
             else:
                 print_error(f"Unknown command: {command}")
                 print_info("Type /help for available commands.")
@@ -426,10 +571,11 @@ def tutorial_main():
 
         # If no tutorial exists, treat input as a topic
         if not session.has_tutorial():
-            if ui.generate_tutorial(user_input):
+            success, error = ui.generate_tutorial(user_input)
+            if success:
                 ui.refresh()
             else:
-                print_error("Failed to generate tutorial. Please try again.")
+                print_error(f"Failed to generate tutorial: {error}")
         else:
             # If tutorial exists, ask if user wants a new topic
             if Confirm.ask(
@@ -437,10 +583,11 @@ def tutorial_main():
                 default=False,
             ):
                 session.reset()
-                if ui.generate_tutorial(user_input):
+                success, error = ui.generate_tutorial(user_input)
+                if success:
                     ui.refresh()
                 else:
-                    print_error("Failed to generate tutorial. Please try again.")
+                    print_error(f"Failed to generate tutorial: {error}")
 
 
 def main():
@@ -457,6 +604,7 @@ def main():
 def chat_main():
     """Entry point for chat mode."""
     load_dotenv()
+    setup_readline()
 
     session = ChatSession()
     ui = ChatUI(session)

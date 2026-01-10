@@ -10,10 +10,13 @@ from rich.live import Live
 from rich.markdown import Markdown
 
 from janett.config import (
+    API_TIMEOUT,
     DEFAULT_MODEL,
+    DEFAULT_PROVIDER,
     DEFAULT_SYSTEM_PROMPT,
-    MODELS,
+    PROVIDERS,
     SAVE_DIR,
+    get_openai_api_key,
 )
 
 console = Console()
@@ -44,16 +47,34 @@ class TokenCounter:
         return total
 
 
+def create_client(provider: str = DEFAULT_PROVIDER) -> OpenAI:
+    """Create an OpenAI client for the given provider."""
+    provider_config = PROVIDERS.get(provider, PROVIDERS["ollama"])
+    api_key = provider_config["api_key"]
+
+    # For OpenAI, get API key from config/environment
+    if provider == "openai":
+        api_key = get_openai_api_key() or ""
+
+    return OpenAI(
+        base_url=provider_config["base_url"],
+        api_key=api_key,
+        timeout=API_TIMEOUT,
+    )
+
+
 class ChatSession:
-    """Manage a chat session with OpenAI models."""
+    """Manage a chat session with LLM models."""
 
     def __init__(
         self,
         model: str = DEFAULT_MODEL,
         system_prompt: str = DEFAULT_SYSTEM_PROMPT,
+        provider: str = DEFAULT_PROVIDER,
         client: OpenAI | None = None,
     ) -> None:
         self.model = model
+        self.provider = provider
         self.system_prompt = system_prompt
         self.messages: list[dict[str, str]] = [
             {"role": "system", "content": system_prompt},
@@ -61,7 +82,14 @@ class ChatSession:
         self.token_counter = TokenCounter(model)
         self.total_input_tokens = 0
         self.total_output_tokens = 0
-        self.client = client or OpenAI()
+        self.client = client or create_client(provider)
+
+    def set_provider(self, provider: str, model: str | None = None):
+        """Switch to a different provider."""
+        self.provider = provider
+        self.client = create_client(provider)
+        if model:
+            self.model = model
 
     def add_user_msg(self, content: str) -> None:
         """Add a user message to the conversation."""
