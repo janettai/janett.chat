@@ -1,25 +1,183 @@
 """Command-line interface for Janett."""
 
 from dotenv import load_dotenv
+from rich.console import Console
+from rich.live import Live
+from rich.markdown import Markdown
 from rich.prompt import Confirm, Prompt
+from rich.text import Text
 
 from janett.chat import ChatSession
-from janett.config import THEME
+from janett.config import APP_NAME, THEME
 from janett.ui import (
-    console,
-    get_prompt,
     list_saved_conversations,
     print_error,
-    print_goodbye,
-    print_header,
     print_help,
     print_info,
     print_models,
     print_success,
     print_token_stats,
-    print_user_message,
-    print_welcome,
 )
+
+console = Console()
+
+
+class ChatUI:
+    """Chat UI with fixed layout."""
+
+    # Layout constants
+    HEADER_LINES = 3      # Header + status + blank line
+    INPUT_LINES = 2       # Separator + input line
+    MIN_MESSAGE_LINES = 5 # Minimum space for messages
+
+    def __init__(self, session: ChatSession):
+        self.session = session
+        self.messages: list[dict] = []
+        self.console = Console()
+        self.height = self.console.height
+        self.width = min(self.console.width, 100)
+
+    def _print_header(self):
+        """Print header with model info."""
+        # App name and model
+        header = Text()
+        header.append(f"{APP_NAME}", style=f"bold {THEME['primary']}")
+        header.append("  ", style="dim")
+        header.append(f"{self.session.model}", style=f"dim {THEME['muted']}")
+
+        # Token count if any
+        stats = self.session.get_token_stats()
+        if stats['total_tokens'] > 0:
+            header.append(f"  {stats['total_tokens']:,} tokens", style=f"dim {THEME['muted']}")
+
+        self.console.print(header)
+        self.console.print()
+
+    def _count_message_lines(self, msg: dict) -> int:
+        """Estimate lines a message will take."""
+        content = msg["content"]
+        # Rough estimate: wrap at width, plus spacing
+        lines = len(content) // (self.width - 4) + 1
+        return lines + 1  # +1 for spacing
+
+    def _print_welcome(self):
+        """Print welcome message when no conversation."""
+        self.console.print()
+        welcome = Text()
+        welcome.append("Hello! ", style="bold")
+        welcome.append("How can I help you today?", style="dim")
+        self.console.print(welcome)
+        self.console.print()
+        self.console.print(f"[dim {THEME['muted']}]Type a message to start chatting, or /help for commands.[/]")
+
+    def _print_messages(self, max_lines: int):
+        """Print conversation messages within line limit."""
+        if not self.messages:
+            self._print_welcome()
+            return
+
+        # Calculate which messages fit
+        lines_used = 0
+        start_idx = 0
+
+        # Work backwards to find which messages fit
+        for i in range(len(self.messages) - 1, -1, -1):
+            msg_lines = self._count_message_lines(self.messages[i])
+            if lines_used + msg_lines > max_lines:
+                start_idx = i + 1
+                break
+            lines_used += msg_lines
+
+        # Print messages that fit
+        for msg in self.messages[start_idx:]:
+            if msg["role"] == "user":
+                # User message with "You" label
+                label = Text()
+                label.append("You", style=f"bold {THEME['primary']}")
+                self.console.print(label)
+                self.console.print(f"  {msg['content']}")
+                self.console.print()
+            elif msg["role"] == "assistant":
+                # Assistant message with app name label
+                label = Text()
+                label.append(APP_NAME, style=f"bold {THEME['assistant']}")
+                self.console.print(label)
+                # Indent the markdown content slightly
+                md = Markdown(msg["content"])
+                self.console.print(md)
+                self.console.print()
+
+    def _print_input_area(self):
+        """Print the input separator."""
+        self.console.print()
+
+    def _get_content_height(self) -> int:
+        """Calculate how many lines the current content takes."""
+        lines = self.HEADER_LINES
+
+        if not self.messages:
+            lines += 4  # Welcome message takes ~4 lines
+        else:
+            for msg in self.messages:
+                lines += self._count_message_lines(msg) + 1  # +1 for label
+
+        return lines
+
+    def refresh(self):
+        """Clear and redraw the entire UI."""
+        self.console.clear()
+
+        # Recalculate width in case terminal was resized
+        self.width = min(self.console.width, 100)
+
+        self._print_header()
+
+        # Print all messages
+        self._print_messages(max_lines=999)
+
+    def get_input(self) -> str:
+        """Get user input."""
+        self._print_input_area()
+
+        try:
+            self.console.print(f"[{THEME['primary']}]>[/] ", end="")
+            user_input = input()
+            return user_input.strip()
+        except (KeyboardInterrupt, EOFError):
+            self.console.print()
+            raise
+
+    def add_user_message(self, content: str):
+        """Add user message to history."""
+        self.messages.append({"role": "user", "content": content})
+
+    def add_assistant_message(self, content: str):
+        """Add assistant message to history."""
+        self.messages.append({"role": "assistant", "content": content})
+
+    def stream_response(self) -> str:
+        """Stream response with live updates."""
+        stream = self.session.client.chat.completions.create(
+            model=self.session.model,
+            stream=True,
+            messages=self.session.messages,
+        )
+
+        full_response = ""
+
+        with Live(console=self.console, refresh_per_second=12, transient=False) as live:
+            for chunk in stream:
+                if chunk.choices[0].delta.content is not None:
+                    token = chunk.choices[0].delta.content
+                    full_response += token
+                    live.update(Markdown(full_response))
+
+        self.console.print()
+        return full_response
+
+    def clear(self):
+        """Clear messages."""
+        self.messages = []
 
 
 def main():
@@ -27,20 +185,23 @@ def main():
     load_dotenv()
 
     session = ChatSession()
+    ui = ChatUI(session)
 
-    print_header()
-    print_welcome(session.model)
+    # Initial display
+    ui.refresh()
 
     while True:
         try:
-            console.print()
-            user_input = Prompt.ask(get_prompt())
-            user_input = user_input.strip()
-
+            user_input = ui.get_input()
         except (KeyboardInterrupt, EOFError):
             stats = session.get_token_stats()
             stats["messages"] = session.get_message_count()
-            print_goodbye(stats)
+            console.print()
+            if stats["total_tokens"] > 0:
+                console.print(f"[dim]{stats.get('messages', 0)} messages • {stats['total_tokens']:,} tokens • ${stats['total_cost']:.4f}[/]")
+            console.print()
+            console.print("[dim]Goodbye.[/]")
+            console.print()
             break
 
         if not user_input:
@@ -55,7 +216,12 @@ def main():
             if command in ("/quit", "/exit", "/q"):
                 stats = session.get_token_stats()
                 stats["messages"] = session.get_message_count()
-                print_goodbye(stats)
+                console.print()
+                if stats["total_tokens"] > 0:
+                    console.print(f"[dim]{stats.get('messages', 0)} messages • {stats['total_tokens']:,} tokens • ${stats['total_cost']:.4f}[/]")
+                console.print()
+                console.print("[dim]Goodbye.[/]")
+                console.print()
                 break
 
             elif command == "/help":
@@ -68,6 +234,8 @@ def main():
                     default=False
                 ):
                     session.clear_history()
+                    ui.clear()
+                    ui.refresh()
                     print_success("Conversation cleared.")
                 else:
                     print_info("Cancelled.")
@@ -84,6 +252,7 @@ def main():
                 )
                 if session.set_model(new_model):
                     print_success(f"Model changed to {new_model}")
+                    ui.refresh()  # Refresh to show new model
                 else:
                     print_error(f"Unknown model: {new_model}")
 
@@ -93,6 +262,8 @@ def main():
                 new_prompt = Prompt.ask("[dim]Prompt[/]")
                 if new_prompt.lower() != "cancel" and new_prompt:
                     session.set_system_prompt(new_prompt)
+                    ui.clear()
+                    ui.refresh()
                     print_success("System prompt updated.")
                 else:
                     print_info("Cancelled.")
@@ -111,6 +282,14 @@ def main():
                     list_saved_conversations()
                     args = Prompt.ask(f"[{THEME['muted']}]Filename[/]")
                 if session.load_conversation(args):
+                    # Rebuild UI messages from session
+                    ui.clear()
+                    for msg in session.messages[1:]:  # Skip system message
+                        if msg["role"] == "user":
+                            ui.add_user_message(msg["content"])
+                        elif msg["role"] == "assistant":
+                            ui.add_assistant_message(msg["content"])
+                    ui.refresh()
                     print_success(f"Loaded: {args}")
                     print_info(f"Model: {session.model} | Messages: {session.get_message_count()}")
                 else:
@@ -119,18 +298,40 @@ def main():
             elif command == "/list":
                 list_saved_conversations()
 
+            elif command == "/refresh":
+                ui.refresh()
+
             else:
                 print_error(f"Unknown command: {command}")
                 print_info("Type /help for available commands.")
 
             continue
 
-        # Display user message
-        print_user_message(user_input)
+        # Add user message
+        ui.add_user_message(user_input)
+        session.add_user_msg(user_input)
 
-        # Get response
-        console.print()
-        session.get_response(user_input)
+        # Count input tokens
+        input_tokens = session.token_counter.count_messages(session.messages)
+        session.total_input_tokens += input_tokens
+
+        # Refresh to show user message
+        ui.refresh()
+
+        # Get and stream response
+        try:
+            response = ui.stream_response()
+            ui.add_assistant_message(response)
+
+            # Count output tokens
+            out_tokens = session.token_counter.count(response)
+            session.total_output_tokens += out_tokens
+            session.add_assistant_message(response)
+
+        except Exception as e:
+            session.messages.pop()  # Remove failed user message
+            ui.messages.pop()  # Remove from UI too
+            print_error(f"API Error: {e}")
 
 
 if __name__ == "__main__":

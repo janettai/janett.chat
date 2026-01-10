@@ -8,15 +8,12 @@ from openai import OpenAI
 from rich.console import Console
 from rich.live import Live
 from rich.markdown import Markdown
-from rich.panel import Panel
-from rich.style import Style
 
 from janett.config import (
     DEFAULT_MODEL,
     DEFAULT_SYSTEM_PROMPT,
     MODELS,
     SAVE_DIR,
-    THEME,
 )
 
 console = Console()
@@ -115,7 +112,7 @@ class ChatSession:
             return ""
 
     def _stream_response(self) -> str:
-        """Stream response with live updates."""
+        """Stream response with live updates - Claude Code style."""
         stream = self.client.chat.completions.create(
             model=self.model, stream=True, messages=self.messages
         )
@@ -128,18 +125,11 @@ class ChatSession:
                     token = chunk.choices[0].delta.content
                     full_response += token
 
+                    # Minimal display - just markdown content
                     md = Markdown(full_response)
-                    panel = Panel(
-                        md,
-                        title=f"[bold {THEME['assistant']}]Assistant[/]",
-                        title_align="left",
-                        border_style=Style(color=THEME["assistant"]),
-                        padding=(1, 2),
-                        subtitle=f"[dim]{self.model}[/]",
-                        subtitle_align="right",
-                    )
-                    live.update(panel)
+                    live.update(md)
 
+        console.print()  # Add spacing after response
         out_tokens = self.token_counter.count(full_response)
         self.total_output_tokens += out_tokens
         self.add_assistant_message(full_response)

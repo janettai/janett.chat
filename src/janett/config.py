@@ -2,16 +2,17 @@
 
 from pathlib import Path
 
-# Theme colors
+# Theme colors - Claude Code inspired minimal palette
 THEME = {
-    "primary": "#7C3AED",      # Violet
-    "secondary": "#06B6D4",    # Cyan
-    "success": "#10B981",      # Emerald
-    "warning": "#F59E0B",      # Amber
+    "primary": "#D97706",      # Amber/Orange (Claude accent)
+    "secondary": "#A3A3A3",    # Neutral gray
+    "success": "#22C55E",      # Green
+    "warning": "#FBBF24",      # Yellow
     "error": "#EF4444",        # Red
-    "muted": "#6B7280",        # Gray
-    "user": "#3B82F6",         # Blue
-    "assistant": "#8B5CF6",    # Purple
+    "muted": "#737373",        # Muted gray
+    "user": "#FFFFFF",         # White for user
+    "assistant": "#D97706",    # Claude amber
+    "dim": "#525252",          # Dim text
 }
 
 # Available models with pricing (per 1M tokens) and context limits
