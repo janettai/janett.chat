@@ -1,98 +1,165 @@
 # Janett
 
-A beautiful terminal chat interface for OpenAI models.
+Learn anything with AI-generated tutorials, right in your terminal.
 
-## Features
-
-- **Streaming responses** - See AI responses as they're generated
-- **Multiple models** - Switch between GPT-4o, GPT-4 Turbo, GPT-3.5, and more
-- **Token tracking** - Monitor usage and costs in real-time
-- **Conversation management** - Save and load chat sessions
-- **Rich terminal UI** - Beautiful colors, panels, and formatting
-- **Markdown rendering** - Code blocks, lists, and formatting rendered in terminal
+Janett creates structured, chapter-based tutorials on any topic using local AI (free & private) or OpenAI.
 
 ## Installation
+
+### Easy Install (Recommended)
+
+**macOS/Linux:**
+```bash
+# 1. Install pipx (one-time setup)
+brew install pipx
+pipx ensurepath
+
+# 2. Install Janett
+pipx install janett
+```
+
+**Windows:**
+```bash
+# 1. Install pipx (one-time setup)
+scoop install pipx
+pipx ensurepath
+
+# 2. Install Janett
+pipx install janett
+```
+
+### Set Up Local AI (Free & Private)
+
+Janett works best with Ollama, which runs AI models on your computer for free:
+
+**macOS:**
+```bash
+brew install ollama
+ollama pull llama3.2
+```
+
+**Linux:**
+```bash
+curl -fsSL https://ollama.com/install.sh | sh
+ollama pull llama3.2
+```
+
+**Windows:**
+Download from [ollama.com/download](https://ollama.com/download), then:
+```bash
+ollama pull llama3.2
+```
+
+### For Developers
 
 ```bash
 pip install janett
 ```
 
-## Quick Start
+## Getting Started
 
-1. Set your OpenAI API key:
+1. **Start Ollama** (if using local AI):
+   ```bash
+   ollama serve
+   ```
 
-```bash
-export OPENAI_API_KEY="your-api-key"
-```
+2. **Run Janett**:
+   ```bash
+   janett
+   ```
 
-Or create a `.env` file:
+3. **Enter a topic** like "Python basics" or "How to cook pasta"
 
-```
-OPENAI_API_KEY=your-api-key
-```
+4. **Navigate chapters** with `/next`, `/prev`, or `/chapters`
 
-2. Start chatting:
-
-```bash
-janett
-```
+5. **Want more?** Type `/more` to generate additional chapters
 
 ## Commands
 
-| Command | Description |
-|---------|-------------|
-| `/help` | Show available commands |
-| `/model` | Change the AI model |
-| `/tokens` | Show token usage and cost |
-| `/save <name>` | Save conversation to file |
-| `/load <name>` | Load a saved conversation |
-| `/list` | List saved conversations |
-| `/system` | Set a custom system prompt |
-| `/clear` | Clear conversation history |
-| `/quit` | Exit the chat |
+| Command | What it does |
+|---------|--------------|
+| `/next` | Go to next chapter |
+| `/prev` | Go to previous chapter |
+| `/chapters` | See all chapters |
+| `/goto 3` | Jump to chapter 3 |
+| `/more` | Add more chapters |
+| `/topic cooking` | Start new tutorial |
+| `/chat` | Switch to chat mode |
+| `/help` | Show all commands |
+| `/quit` | Exit |
 
-## Supported Models
+## Using OpenAI Instead
 
-| Model | Input Cost | Output Cost | Context |
-|-------|-----------|-------------|---------|
-| gpt-4o-mini | $0.15/1M | $0.60/1M | 128K |
-| gpt-4o | $5.00/1M | $15.00/1M | 128K |
-| gpt-4-turbo | $10.00/1M | $30.00/1M | 128K |
-| gpt-3.5-turbo | $0.50/1M | $1.50/1M | 16K |
-
-## Programmatic Usage
-
-You can also use Janett as a library:
-
-```python
-from janett import ChatSession
-
-session = ChatSession(model="gpt-4o-mini")
-response = session.get_response("Hello!", stream=False)
-print(response)
-
-# Get token stats
-stats = session.get_token_stats()
-print(f"Total cost: ${stats['total_cost']:.4f}")
-```
-
-## Development
+If you prefer OpenAI (requires API key):
 
 ```bash
-# Clone the repository
-git clone https://github.com/janettai/janett.chat.git
-cd janett.chat
+# In Janett, run:
+/apikey
+# Enter your OpenAI API key
 
-# Install dependencies
-pip install -e ".[dev]"
+/provider
+# Select: openai
+```
 
-# Run linting
-ruff check src/
+Get an API key at [platform.openai.com/api-keys](https://platform.openai.com/api-keys)
 
-# Run type checking
-mypy src/
+## Example
+
+```
+$ janett
+
+Janett Tutorial  llama3.2 (Ollama)
+
+Welcome to Janett Tutorials
+
+Enter a topic to generate a comprehensive tutorial.
+
+> photography for beginners
+
+Generating tutorial: photography for beginners
+Creating chapters...
+
+┌─────────────────────────────────────────────────────┐
+│ Chapter 1: Understanding Your Camera  [1/5]        │
+└─────────────────────────────────────────────────────┘
+
+Photography begins with understanding your camera...
+
+> /next     # Continue to chapter 2
+> /more     # Generate more chapters
+> /chat     # Ask questions about the topic
+```
+
+## Tips
+
+- **Better results**: Use specific topics like "Python lists and loops" instead of just "Python"
+- **Go deeper**: Use `/more` after finishing to generate advanced chapters
+- **Ask questions**: Use `/chat` to ask about anything in the tutorial
+- **Bigger models**: Try `ollama pull llama3.1` for more detailed tutorials
+
+## Troubleshooting
+
+**"Failed to generate tutorial"**
+- Make sure Ollama is running: `ollama serve`
+- Check you have a model: `ollama list`
+
+**"No models found"**
+- Pull a model: `ollama pull llama3.2`
+
+**Slow generation**
+- First run downloads the model (~2GB)
+- Subsequent runs are faster
+
+## Uninstall
+
+```bash
+pipx uninstall janett
 ```
 
 ## License
 
-MIT License - see [LICENSE](LICENSE) for details.
+MIT License - free to use and modify.
+
+---
+
+Made with AI, for humans who want to learn.

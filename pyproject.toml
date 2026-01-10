@@ -4,8 +4,8 @@ build-backend = "hatchling.build"
 
 [project]
 name = "janett"
-version = "0.1.0"
-description = "A beautiful terminal chat interface for OpenAI models"
+version = "0.2.0"
+description = "Interactive tutorial generator and chat CLI powered by local LLMs (Ollama) or OpenAI"
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.12"
@@ -13,14 +13,16 @@ authors = [
     { name = "Janett AI", email = "hello@janett.ai" }
 ]
 keywords = [
+    "tutorial",
+    "learning",
+    "ollama",
     "openai",
     "chatgpt",
-    "gpt",
+    "llm",
     "terminal",
     "cli",
-    "chat",
     "ai",
-    "llm",
+    "education",
 ]
 classifiers = [
     "Development Status :: 4 - Beta",
@@ -40,6 +42,7 @@ dependencies = [
     "python-dotenv>=1.0.0",
     "rich>=13.0.0",
     "tiktoken>=0.5.0",
+    "httpx>=0.25.0",
 ]
 
 [project.optional-dependencies]
