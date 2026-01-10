@@ -1,22 +1,30 @@
 """Command-line interface for Janett."""
 
+import sys
+
 from dotenv import load_dotenv
 from rich.console import Console
 from rich.live import Live
 from rich.markdown import Markdown
-from rich.prompt import Confirm, Prompt
+from rich.prompt import Confirm, IntPrompt, Prompt
+from rich.status import Status
 from rich.text import Text
 
 from janett.chat import ChatSession
 from janett.config import APP_NAME, THEME
+from janett.tutorial import TutorialSession
 from janett.ui import (
     list_saved_conversations,
+    print_chapter_content,
+    print_chapter_list,
     print_error,
     print_help,
     print_info,
     print_models,
     print_success,
     print_token_stats,
+    print_tutorial_help,
+    print_tutorial_welcome,
 )
 
 console = Console()
@@ -180,8 +188,274 @@ class ChatUI:
         self.messages = []
 
 
+class TutorialUI:
+    """Tutorial UI with chapter navigation."""
+
+    def __init__(self, session: TutorialSession):
+        self.session = session
+        self.console = Console()
+        self.width = min(self.console.width, 100)
+
+    def _print_header(self):
+        """Print header with tutorial info."""
+        header = Text()
+        header.append(f"{APP_NAME}", style=f"bold {THEME['primary']}")
+        header.append(" Tutorial", style="bold")
+
+        if self.session.tutorial:
+            header.append("  ", style="dim")
+            header.append(
+                f"Ch {self.session.current_chapter_index + 1}/{self.session.tutorial.chapter_count}",
+                style=f"dim {THEME['muted']}",
+            )
+
+        self.console.print(header)
+        self.console.print()
+
+    def refresh(self):
+        """Clear and redraw the UI."""
+        self.console.clear()
+        self._print_header()
+
+        if not self.session.has_tutorial():
+            print_tutorial_welcome()
+        else:
+            chapter = self.session.current_chapter
+            if chapter:
+                print_chapter_content(
+                    chapter,
+                    self.session.current_chapter_index,
+                    self.session.tutorial.chapter_count,
+                )
+
+    def show_chapters(self):
+        """Display chapter list."""
+        if self.session.tutorial:
+            print_chapter_list(
+                self.session.tutorial,
+                self.session.current_chapter_index,
+            )
+
+    def get_input(self) -> str:
+        """Get user input."""
+        self.console.print()
+        try:
+            self.console.print(f"[{THEME['primary']}]>[/] ", end="")
+            user_input = input()
+            return user_input.strip()
+        except (KeyboardInterrupt, EOFError):
+            self.console.print()
+            raise
+
+    def generate_tutorial(self, topic: str) -> bool:
+        """Generate a new tutorial with loading indicator."""
+        self.console.print()
+        self.console.print(f"[{THEME['primary']}]Generating tutorial:[/] [bold]{topic}[/]")
+
+        with Status(
+            f"[dim]Creating chapters...[/]",
+            console=self.console,
+            spinner="dots",
+        ):
+            success = self.session.generate_tutorial(topic)
+
+        return success
+
+    def prompt_chapter_selection(self) -> int | None:
+        """Show interactive chapter selection prompt."""
+        if not self.session.tutorial:
+            return None
+
+        self.show_chapters()
+
+        try:
+            choice = IntPrompt.ask(
+                f"[{THEME['muted']}]Select chapter[/]",
+                default=self.session.current_chapter_index + 1,
+            )
+            return choice - 1  # Convert to 0-based index
+        except (KeyboardInterrupt, EOFError):
+            return None
+
+
+def tutorial_main():
+    """Main entry point for tutorial mode."""
+    load_dotenv()
+
+    session = TutorialSession()
+    ui = TutorialUI(session)
+
+    # Initial display
+    ui.refresh()
+
+    while True:
+        try:
+            user_input = ui.get_input()
+        except (KeyboardInterrupt, EOFError):
+            console.print()
+            console.print("[dim]Goodbye![/]")
+            console.print()
+            break
+
+        if not user_input:
+            continue
+
+        # Handle commands
+        if user_input.startswith("/"):
+            parts = user_input.split(maxsplit=1)
+            command = parts[0].lower()
+            args = parts[1] if len(parts) > 1 else ""
+
+            if command in ("/quit", "/exit", "/q"):
+                console.print()
+                console.print("[dim]Goodbye![/]")
+                console.print()
+                break
+
+            elif command == "/help":
+                print_tutorial_help()
+
+            elif command == "/topic":
+                if args:
+                    if ui.generate_tutorial(args):
+                        ui.refresh()
+                    else:
+                        print_error("Failed to generate tutorial. Please try again.")
+                else:
+                    topic = Prompt.ask(f"[{THEME['muted']}]Enter topic[/]")
+                    if topic:
+                        if ui.generate_tutorial(topic):
+                            ui.refresh()
+                        else:
+                            print_error("Failed to generate tutorial. Please try again.")
+
+            elif command == "/chapters":
+                if session.has_tutorial():
+                    choice = ui.prompt_chapter_selection()
+                    if choice is not None and session.go_to_chapter(choice):
+                        ui.refresh()
+                else:
+                    print_info("No tutorial loaded. Enter a topic to start.")
+
+            elif command == "/next":
+                if session.has_tutorial():
+                    if session.next_chapter():
+                        ui.refresh()
+                    else:
+                        print_info("You're at the last chapter.")
+                else:
+                    print_info("No tutorial loaded. Enter a topic to start.")
+
+            elif command == "/prev":
+                if session.has_tutorial():
+                    if session.prev_chapter():
+                        ui.refresh()
+                    else:
+                        print_info("You're at the first chapter.")
+                else:
+                    print_info("No tutorial loaded. Enter a topic to start.")
+
+            elif command == "/goto":
+                if session.has_tutorial():
+                    try:
+                        chapter_num = int(args)
+                        if session.go_to_chapter(chapter_num - 1):
+                            ui.refresh()
+                        else:
+                            print_error(f"Invalid chapter. Use 1-{session.tutorial.chapter_count}")
+                    except ValueError:
+                        print_error("Please provide a valid chapter number.")
+                else:
+                    print_info("No tutorial loaded. Enter a topic to start.")
+
+            elif command == "/refresh":
+                ui.refresh()
+
+            elif command == "/chat":
+                # Enter chat mode within tutorial
+                console.print()
+                console.print(f"[bold]Chat Mode[/] [dim](type /back to return to tutorial)[/]")
+                console.print()
+
+                chat_session = ChatSession()
+
+                while True:
+                    try:
+                        console.print(f"[{THEME['primary']}]>[/] ", end="")
+                        chat_input = input().strip()
+                    except (KeyboardInterrupt, EOFError):
+                        ui.refresh()
+                        break
+
+                    if not chat_input:
+                        continue
+
+                    if chat_input.lower() in ("/back", "/exit"):
+                        ui.refresh()
+                        break
+
+                    # Get response from chat
+                    chat_session.add_user_msg(chat_input)
+                    console.print()
+
+                    try:
+                        stream = chat_session.client.chat.completions.create(
+                            model=chat_session.model,
+                            stream=True,
+                            messages=chat_session.messages,
+                        )
+
+                        full_response = ""
+                        with Live(console=console, refresh_per_second=12, transient=False) as live:
+                            for chunk in stream:
+                                if chunk.choices[0].delta.content is not None:
+                                    full_response += chunk.choices[0].delta.content
+                                    live.update(Markdown(full_response))
+
+                        console.print()
+                        chat_session.add_assistant_message(full_response)
+                    except Exception as e:
+                        chat_session.messages.pop()
+                        print_error(f"API Error: {e}")
+
+            else:
+                print_error(f"Unknown command: {command}")
+                print_info("Type /help for available commands.")
+
+            continue
+
+        # If no tutorial exists, treat input as a topic
+        if not session.has_tutorial():
+            if ui.generate_tutorial(user_input):
+                ui.refresh()
+            else:
+                print_error("Failed to generate tutorial. Please try again.")
+        else:
+            # If tutorial exists, ask if user wants a new topic
+            if Confirm.ask(
+                f"[{THEME['warning']}]Start new tutorial on '{user_input}'?[/]",
+                default=False,
+            ):
+                session.reset()
+                if ui.generate_tutorial(user_input):
+                    ui.refresh()
+                else:
+                    print_error("Failed to generate tutorial. Please try again.")
+
+
 def main():
     """Main entry point for the CLI."""
+    # Chat mode requires explicit flag, tutorial is default
+    if "--chat" in sys.argv or "-c" in sys.argv:
+        chat_main()
+        return
+
+    # Default to tutorial mode
+    tutorial_main()
+
+
+def chat_main():
+    """Entry point for chat mode."""
     load_dotenv()
 
     session = ChatSession()
