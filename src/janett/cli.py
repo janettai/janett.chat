@@ -592,6 +592,12 @@ def tutorial_main():
 
 def main():
     """Main entry point for the CLI."""
+    # Version flag
+    if "--version" in sys.argv or "-v" in sys.argv:
+        from janett import __version__
+        print(f"janett {__version__}")
+        return
+
     # Chat mode requires explicit flag, tutorial is default
     if "--chat" in sys.argv or "-c" in sys.argv:
         chat_main()
