@@ -26,6 +26,11 @@ export type Tutorial = {
 
 export type AppMode = 'welcome' | 'tutorial' | 'chat' | 'settings';
 
+export type ChatMessage = {
+	role: 'user' | 'assistant';
+	content: string;
+};
+
 export type AppState = {
 	mode: AppMode;
 	tutorial: Tutorial | null;
@@ -34,6 +39,7 @@ export type AppState = {
 	model: string;
 	isGenerating: boolean;
 	error: string | null;
+	chatMessages: ChatMessage[];
 };
 
 export type Config = {

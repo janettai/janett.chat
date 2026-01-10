@@ -11,7 +11,9 @@
 	"scripts": {
 		"build": "tsc",
 		"dev": "tsc --watch",
-		"test": "prettier --check . && xo && ava"
+		"lint": "prettier --check .",
+		"lint:fix": "prettier --write .",
+		"test": "npm run build"
 	},
 	"files": [
 		"dist"

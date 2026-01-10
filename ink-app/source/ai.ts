@@ -6,7 +6,7 @@ import {generateText, streamText} from 'ai';
 import {createOpenAI} from '@ai-sdk/openai';
 import {createAnthropic} from '@ai-sdk/anthropic';
 import {type Provider, type Tutorial, type Chapter} from './types.js';
-import {getApiKey} from './config.js';
+import {getApiKey, getOllamaBaseUrl} from './config.js';
 
 const TUTORIAL_SYSTEM_PROMPT = `You are an expert educator who creates comprehensive, structured tutorials.
 
@@ -72,6 +72,15 @@ Guidelines:
 IMPORTANT: Start from Chapter {start_num} and follow the format exactly.`;
 
 function getProvider(provider: Provider, model: string) {
+	if (provider === 'ollama') {
+		// Ollama uses OpenAI-compatible API with no auth required
+		const ollama = createOpenAI({
+			baseURL: getOllamaBaseUrl(),
+			apiKey: 'ollama', // Ollama doesn't require an API key
+		});
+		return ollama(model) as any;
+	}
+
 	const apiKey = getApiKey(provider);
 
 	if (!apiKey) {

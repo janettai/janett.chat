@@ -24,7 +24,8 @@ function renderInlineMarkdown(text: string): JSX.Element[] {
 		if (codeMatch) {
 			elements.push(
 				<Text key={keyIdx++} color="green" backgroundColor="gray">
-					{' '}{codeMatch[1]}{' '}
+					{' '}
+					{codeMatch[1]}{' '}
 				</Text>,
 			);
 			remaining = remaining.slice(codeMatch[0].length);
@@ -65,7 +66,9 @@ function renderInlineMarkdown(text: string): JSX.Element[] {
 			elements.push(<Text key={keyIdx++}>{remaining[0]}</Text>);
 			remaining = remaining.slice(1);
 		} else {
-			elements.push(<Text key={keyIdx++}>{remaining.slice(0, nextSpecial)}</Text>);
+			elements.push(
+				<Text key={keyIdx++}>{remaining.slice(0, nextSpecial)}</Text>,
+			);
 			remaining = remaining.slice(nextSpecial);
 		}
 	}
@@ -214,7 +217,10 @@ export default function ChapterView({
 						<Text bold color="cyan">
 							Chapter {chapter.id}: {chapter.title}
 						</Text>
-						<Text dimColor>  [{currentIndex + 1}/{totalChapters}]</Text>
+						<Text dimColor>
+							{' '}
+							[{currentIndex + 1}/{totalChapters}]
+						</Text>
 					</Box>
 					<Text dimColor italic>
 						{chapter.summary}

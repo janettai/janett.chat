@@ -19,7 +19,7 @@ export default function ChapterList({tutorial, currentIndex}: Props) {
 					{tutorial.title}
 				</Text>
 			</Box>
-			
+
 			<Box marginBottom={1}>
 				<Text dimColor italic>
 					{tutorial.description}
@@ -36,9 +36,7 @@ export default function ChapterList({tutorial, currentIndex}: Props) {
 								{isCurrent ? '▶ ' : '  '}
 								{chapter.id}. {chapter.title}
 							</Text>
-							{isCurrent && (
-								<Text color="yellow"> ← You are here</Text>
-							)}
+							{isCurrent && <Text color="yellow"> ← You are here</Text>}
 						</Box>
 					);
 				})}
@@ -46,7 +44,8 @@ export default function ChapterList({tutorial, currentIndex}: Props) {
 
 			<Box marginTop={2}>
 				<Text dimColor>
-					Type <Text color="yellow">/goto [N]</Text> to jump to a chapter, or <Text color="yellow">/back</Text> to return
+					Type <Text color="yellow">/goto [N]</Text> to jump to a chapter, or{' '}
+					<Text color="yellow">/back</Text> to return
 				</Text>
 			</Box>
 		</Box>

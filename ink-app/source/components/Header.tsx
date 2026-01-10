@@ -15,8 +15,14 @@ type Props = {
 };
 
 export default function Header({mode, provider, model, chapterInfo}: Props) {
-	const modeDisplay = mode === 'tutorial' ? 'Tutorial' : mode === 'chat' ? 'Chat' : 'Welcome';
-	const providerDisplay = provider === 'openai' ? 'OpenAI' : provider === 'anthropic' ? 'Anthropic' : 'Ollama';
+	const modeDisplay =
+		mode === 'tutorial' ? 'Tutorial' : mode === 'chat' ? 'Chat' : 'Welcome';
+	const providerDisplay =
+		provider === 'openai'
+			? 'OpenAI'
+			: provider === 'anthropic'
+			? 'Anthropic'
+			: 'Ollama';
 
 	return (
 		<Box flexDirection="column" marginBottom={1}>

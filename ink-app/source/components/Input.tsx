@@ -21,7 +21,9 @@ export default function Input({
 }: Props) {
 	return (
 		<Box paddingX={2} paddingY={1}>
-			<Text color="yellow" bold>❯ </Text>
+			<Text color="yellow" bold>
+				❯{' '}
+			</Text>
 			<TextInput
 				value={value}
 				onChange={onChange}

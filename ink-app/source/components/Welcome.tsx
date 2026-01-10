@@ -13,7 +13,7 @@ export default function Welcome() {
 			<Gradient name="passion">
 				<BigText text="Janett" font="chrome" />
 			</Gradient>
-			
+
 			<Box marginTop={1} marginBottom={1}>
 				<Text color="cyan" bold>
 					Learn anything with AI-generated tutorials
@@ -21,10 +21,12 @@ export default function Welcome() {
 			</Box>
 
 			<Box flexDirection="column" marginTop={1}>
-				<Text dimColor>Enter a topic to generate a comprehensive tutorial:</Text>
-				<Text color="green">  • "Python basics"</Text>
-				<Text color="green">  • "Photography for beginners"</Text>
-				<Text color="green">  • "How to cook pasta"</Text>
+				<Text dimColor>
+					Enter a topic to generate a comprehensive tutorial:
+				</Text>
+				<Text color="green"> • "Python basics"</Text>
+				<Text color="green"> • "Photography for beginners"</Text>
+				<Text color="green"> • "How to cook pasta"</Text>
 			</Box>
 
 			<Box marginTop={2}>
