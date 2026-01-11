@@ -240,7 +240,7 @@ class TutorialUI:
         """Print header with tutorial info."""
         header = Text()
         header.append(f"{APP_NAME}", style=f"bold {THEME['primary']}")
-        header.append(" Tutorial", style="bold")
+        header.append(" AI", style="bold")
 
         # Show provider and model
         provider_name = PROVIDERS.get(self.session.provider, {}).get(
@@ -299,7 +299,7 @@ class TutorialUI:
         """Generate a new tutorial with loading indicator."""
         self.console.print()
         self.console.print(
-            f"[{THEME['primary']}]Generating tutorial:[/] [bold]{topic}[/]"
+            f"[{THEME['primary']}]Generating lessons:[/] [bold]{topic}[/]"
         )
 
         with Status(
@@ -466,7 +466,7 @@ def tutorial_main():
                     # Enter chat mode within tutorial (uses same provider/model)
                     console.print()
                     console.print(
-                        "[bold]Chat Mode[/] [dim](type /back to return to tutorial)[/]"
+                        "[bold]Chat Mode[/] [dim](type /back to return to lesson)[/]"
                     )
                     console.print()
 
