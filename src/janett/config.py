@@ -8,15 +8,15 @@ import httpx
 
 # Theme colors - Claude Code inspired minimal palette
 THEME = {
-    "primary": "#D97706",      # Amber/Orange (Claude accent)
-    "secondary": "#A3A3A3",    # Neutral gray
-    "success": "#22C55E",      # Green
-    "warning": "#FBBF24",      # Yellow
-    "error": "#EF4444",        # Red
-    "muted": "#737373",        # Muted gray
-    "user": "#FFFFFF",         # White for user
-    "assistant": "#D97706",    # Claude amber
-    "dim": "#525252",          # Dim text
+    "primary": "#D97706",  # Amber/Orange (Claude accent)
+    "secondary": "#A3A3A3",  # Neutral gray
+    "success": "#22C55E",  # Green
+    "warning": "#FBBF24",  # Yellow
+    "error": "#EF4444",  # Red
+    "muted": "#737373",  # Muted gray
+    "user": "#FFFFFF",  # White for user
+    "assistant": "#D97706",  # Claude amber
+    "dim": "#525252",  # Dim text
 }
 
 # Provider configuration

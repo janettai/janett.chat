@@ -1,7 +1,13 @@
 {
   "permissions": {
     "allow": [
-      "Bash(python -m py_compile:*)"
+      "Bash(python -m py_compile:*)",
+      "Bash(npm run build:*)",
+      "Bash(npm test:*)",
+      "Bash(npx prettier:*)",
+      "Bash(npx ava)",
+      "Bash(npm run test:*)",
+      "Bash(timeout 2 node:*)"
     ]
   }
 }

@@ -3,7 +3,6 @@
 import json
 import re
 from dataclasses import dataclass, field
-from typing import Optional
 
 from openai import OpenAI
 
@@ -52,7 +51,7 @@ class Tutorial:
             chapters=chapters,
         )
 
-    def get_chapter(self, index: int) -> Optional[Chapter]:
+    def get_chapter(self, index: int) -> Chapter | None:
         """Get chapter by 0-based index."""
         if 0 <= index < len(self.chapters):
             return self.chapters[index]
@@ -76,7 +75,7 @@ class TutorialSession:
         self.model = model
         self.provider = provider
         self.client = client or create_client(provider)
-        self.tutorial: Optional[Tutorial] = None
+        self.tutorial: Tutorial | None = None
         self.current_chapter_index: int = 0
 
     def set_provider(self, provider: str, model: str | None = None):
@@ -119,7 +118,7 @@ class TutorialSession:
         except Exception as e:
             return False, str(e)
 
-    def _parse_response(self, response: str) -> Optional[dict]:
+    def _parse_response(self, response: str) -> dict | None:
         """Parse AI response to extract tutorial data from structured format."""
         response = response.strip()
 
@@ -131,7 +130,7 @@ class TutorialSession:
         # Fallback: try JSON parsing for backwards compatibility
         return self._parse_json_format(response)
 
-    def _parse_structured_format(self, response: str) -> Optional[dict]:
+    def _parse_structured_format(self, response: str) -> dict | None:
         """Parse the ===TUTORIAL=== / ===CHAPTER=== format."""
         # Check if response has our markers
         if "===TUTORIAL===" not in response and "===CHAPTER" not in response:
@@ -159,12 +158,14 @@ class TutorialSession:
             if content.endswith("---"):
                 content = content[:-3].strip()
 
-            result["chapters"].append({
-                "id": int(chapter_num),
-                "title": title.strip(),
-                "summary": summary.strip(),
-                "content": content,
-            })
+            result["chapters"].append(
+                {
+                    "id": int(chapter_num),
+                    "title": title.strip(),
+                    "summary": summary.strip(),
+                    "content": content,
+                }
+            )
 
         # If we found chapters, return the result
         if result["chapters"]:
@@ -175,7 +176,7 @@ class TutorialSession:
 
         return None
 
-    def _parse_json_format(self, response: str) -> Optional[dict]:
+    def _parse_json_format(self, response: str) -> dict | None:
         """Fallback JSON parser for backwards compatibility."""
         # Try direct JSON parse
         try:
@@ -201,7 +202,7 @@ class TutorialSession:
         return None
 
     @property
-    def current_chapter(self) -> Optional[Chapter]:
+    def current_chapter(self) -> Chapter | None:
         """Get the current chapter."""
         if self.tutorial:
             return self.tutorial.get_chapter(self.current_chapter_index)
@@ -209,7 +210,10 @@ class TutorialSession:
 
     def next_chapter(self) -> bool:
         """Move to next chapter. Returns False if at end."""
-        if self.tutorial and self.current_chapter_index < self.tutorial.chapter_count - 1:
+        if (
+            self.tutorial
+            and self.current_chapter_index < self.tutorial.chapter_count - 1
+        ):
             self.current_chapter_index += 1
             return True
         return False
@@ -257,7 +261,10 @@ class TutorialSession:
 
         messages = [
             {"role": "system", "content": system_prompt},
-            {"role": "user", "content": f"Continue the tutorial on: {self.tutorial.title}"},
+            {
+                "role": "user",
+                "content": f"Continue the tutorial on: {self.tutorial.title}",
+            },
         ]
 
         try:
@@ -298,12 +305,14 @@ class TutorialSession:
             if content.endswith("---"):
                 content = content[:-3].strip()
 
-            chapters.append(Chapter(
-                id=int(chapter_num),
-                title=title.strip(),
-                summary=summary.strip(),
-                content=content,
-            ))
+            chapters.append(
+                Chapter(
+                    id=int(chapter_num),
+                    title=title.strip(),
+                    summary=summary.strip(),
+                    content=content,
+                )
+            )
 
         return chapters
 
