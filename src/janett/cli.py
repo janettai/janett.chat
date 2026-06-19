@@ -6,45 +6,26 @@ import sys
 from pathlib import Path
 
 from dotenv import load_dotenv
-
-# Setup persistent command history
-HISTORY_FILE = Path.home() / ".janett" / "history"
-
-
-def setup_readline():
-    """Configure readline with persistent history."""
-    HISTORY_FILE.parent.mkdir(exist_ok=True)
-
-    # Load existing history
-    if HISTORY_FILE.exists():
-        try:
-            readline.read_history_file(HISTORY_FILE)
-        except Exception:
-            pass
-
-    # Set history length
-    readline.set_history_length(1000)
-
-    # Save history on exit
-    atexit.register(lambda: readline.write_history_file(HISTORY_FILE))
-
-
 from rich.console import Console
-from rich.live import Live
 from rich.markdown import Markdown
 from rich.prompt import Confirm, IntPrompt, Prompt
 from rich.status import Status
 from rich.text import Text
 
-from janett.chat import ChatSession
+from janett.chat import ChatSession, stream_completion
 from janett.config import (
     APP_NAME,
+    DEFAULT_MODEL,
     OPENAI_MODELS,
     PROVIDERS,
     THEME,
     get_ollama_models,
     get_openai_api_key,
+    get_saved_model,
+    get_saved_provider,
     set_openai_api_key,
+    set_saved_model,
+    set_saved_provider,
 )
 from janett.tutorial import TutorialSession
 from janett.ui import (
@@ -64,6 +45,42 @@ from janett.ui import (
 
 console = Console()
 
+# Setup persistent command history
+HISTORY_FILE = Path.home() / ".janett" / "history"
+
+
+def setup_readline() -> None:
+    """Configure readline with persistent history."""
+    HISTORY_FILE.parent.mkdir(exist_ok=True)
+
+    # Load existing history
+    if HISTORY_FILE.exists():
+        try:
+            readline.read_history_file(HISTORY_FILE)
+        except Exception:
+            pass
+
+    # Set history length
+    readline.set_history_length(1000)
+
+    # Save history on exit
+    atexit.register(lambda: readline.write_history_file(HISTORY_FILE))
+
+
+def _default_model_for(provider: str) -> str:
+    """Pick a sensible default model for a provider."""
+    if provider == "ollama":
+        models = get_ollama_models()
+        return models[0] if models else DEFAULT_MODEL
+    return "gpt-4o-mini"
+
+
+def _startup_provider_model() -> tuple[str, str]:
+    """Resolve the provider/model to start with, honoring saved settings."""
+    provider = get_saved_provider()
+    model = get_saved_model() or _default_model_for(provider)
+    return provider, model
+
 
 class ChatUI:
     """Chat UI with fixed layout."""
@@ -73,14 +90,14 @@ class ChatUI:
     INPUT_LINES = 2  # Separator + input line
     MIN_MESSAGE_LINES = 5  # Minimum space for messages
 
-    def __init__(self, session: ChatSession):
+    def __init__(self, session: ChatSession) -> None:
         self.session = session
-        self.messages: list[dict] = []
+        self.messages: list[dict[str, str]] = []
         self.console = Console()
         self.height = self.console.height
         self.width = min(self.console.width, 100)
 
-    def _print_header(self):
+    def _print_header(self) -> None:
         """Print header with model info."""
         # App name and model
         header = Text()
@@ -98,14 +115,14 @@ class ChatUI:
         self.console.print(header)
         self.console.print()
 
-    def _count_message_lines(self, msg: dict) -> int:
+    def _count_message_lines(self, msg: dict[str, str]) -> int:
         """Estimate lines a message will take."""
         content = msg["content"]
         # Rough estimate: wrap at width, plus spacing
         lines = len(content) // (self.width - 4) + 1
         return lines + 1  # +1 for spacing
 
-    def _print_welcome(self):
+    def _print_welcome(self) -> None:
         """Print welcome message when no conversation."""
         self.console.print()
         welcome = Text()
@@ -114,10 +131,11 @@ class ChatUI:
         self.console.print(welcome)
         self.console.print()
         self.console.print(
-            f"[dim {THEME['muted']}]Type a message to start chatting, or /help for commands.[/]"
+            f"[dim {THEME['muted']}]Type a message to start chatting, "
+            f"or /help for commands.[/]"
         )
 
-    def _print_messages(self, max_lines: int):
+    def _print_messages(self, max_lines: int) -> None:
         """Print conversation messages within line limit."""
         if not self.messages:
             self._print_welcome()
@@ -155,7 +173,7 @@ class ChatUI:
                     self.console.print(md)
                     self.console.print()
 
-    def _print_input_area(self):
+    def _print_input_area(self) -> None:
         """Print the input separator."""
         self.console.print()
 
@@ -171,7 +189,7 @@ class ChatUI:
 
         return lines
 
-    def refresh(self):
+    def refresh(self) -> None:
         """Clear and redraw the entire UI."""
         self.console.clear()
 
@@ -195,35 +213,24 @@ class ChatUI:
             self.console.print()
             raise
 
-    def add_user_message(self, content: str):
+    def add_user_message(self, content: str) -> None:
         """Add user message to history."""
         self.messages.append({"role": "user", "content": content})
 
-    def add_assistant_message(self, content: str):
+    def add_assistant_message(self, content: str) -> None:
         """Add assistant message to history."""
         self.messages.append({"role": "assistant", "content": content})
 
     def stream_response(self) -> str:
         """Stream response with live updates."""
-        stream = self.session.client.chat.completions.create(
-            model=self.session.model,
-            stream=True,
-            messages=self.session.messages,
+        return stream_completion(
+            self.session.client,
+            self.session.model,
+            self.session.messages,
+            self.console,
         )
 
-        full_response = ""
-
-        with Live(console=self.console, refresh_per_second=12, transient=False) as live:
-            for chunk in stream:
-                if chunk.choices[0].delta.content is not None:
-                    token = chunk.choices[0].delta.content
-                    full_response += token
-                    live.update(Markdown(full_response))
-
-        self.console.print()
-        return full_response
-
-    def clear(self):
+    def clear(self) -> None:
         """Clear messages."""
         self.messages = []
 
@@ -231,12 +238,12 @@ class ChatUI:
 class TutorialUI:
     """Tutorial UI with chapter navigation."""
 
-    def __init__(self, session: TutorialSession):
+    def __init__(self, session: TutorialSession) -> None:
         self.session = session
         self.console = Console()
         self.width = min(self.console.width, 100)
 
-    def _print_header(self):
+    def _print_header(self) -> None:
         """Print header with tutorial info."""
         header = Text()
         header.append(f"{APP_NAME}", style=f"bold {THEME['primary']}")
@@ -253,19 +260,21 @@ class TutorialUI:
         if self.session.tutorial:
             header.append("  ", style="dim")
             header.append(
-                f"Ch {self.session.current_chapter_index + 1}/{self.session.tutorial.chapter_count}",
+                f"Ch {self.session.current_chapter_index + 1}/"
+                f"{self.session.tutorial.chapter_count}",
                 style=f"dim {THEME['muted']}",
             )
 
         self.console.print(header)
         self.console.print()
 
-    def refresh(self):
+    def refresh(self) -> None:
         """Clear and redraw the UI."""
         self.console.clear()
         self._print_header()
 
-        if not self.session.has_tutorial():
+        tutorial = self.session.tutorial
+        if tutorial is None:
             print_tutorial_welcome()
         else:
             chapter = self.session.current_chapter
@@ -273,10 +282,10 @@ class TutorialUI:
                 print_chapter_content(
                     chapter,
                     self.session.current_chapter_index,
-                    self.session.tutorial.chapter_count,
+                    tutorial.chapter_count,
                 )
 
-    def show_chapters(self):
+    def show_chapters(self) -> None:
         """Display chapter list."""
         if self.session.tutorial:
             print_chapter_list(
@@ -344,12 +353,13 @@ class TutorialUI:
             return None
 
 
-def tutorial_main():
+def tutorial_main() -> None:
     """Main entry point for tutorial mode."""
     load_dotenv()
     setup_readline()
 
-    session = TutorialSession()
+    provider, model = _startup_provider_model()
+    session = TutorialSession(model=model, provider=provider)
     ui = TutorialUI(session)
 
     # Initial display
@@ -425,14 +435,15 @@ def tutorial_main():
                         print_info("No tutorial loaded. Enter a topic to start.")
 
                 case "/goto":
-                    if session.has_tutorial():
+                    tutorial = session.tutorial
+                    if tutorial is not None:
                         try:
                             chapter_num = int(args)
                             if session.go_to_chapter(chapter_num - 1):
                                 ui.refresh()
                             else:
                                 print_error(
-                                    f"Invalid chapter. Use 1-{session.tutorial.chapter_count}"
+                                    f"Invalid chapter. Use 1-{tutorial.chapter_count}"
                                 )
                         except ValueError:
                             print_error("Please provide a valid chapter number.")
@@ -495,22 +506,11 @@ def tutorial_main():
                         console.print()
 
                         try:
-                            stream = chat_session.client.chat.completions.create(
-                                model=chat_session.model,
-                                stream=True,
-                                messages=chat_session.messages,
+                            full_response = stream_completion(
+                                chat_session.client,
+                                chat_session.model,
+                                chat_session.messages,
                             )
-
-                            full_response = ""
-                            with Live(
-                                console=console, refresh_per_second=12, transient=False
-                            ) as live:
-                                for chunk in stream:
-                                    if chunk.choices[0].delta.content is not None:
-                                        full_response += chunk.choices[0].delta.content
-                                        live.update(Markdown(full_response))
-
-                            console.print()
                             chat_session.add_assistant_message(full_response)
                         except Exception as e:
                             chat_session.messages.pop()
@@ -532,6 +532,7 @@ def tutorial_main():
                         )
                         if new_model in models:
                             session.model = new_model
+                            set_saved_model(new_model)
                             ui.refresh()
                             print_success(f"Model changed to {new_model}")
                         elif new_model != session.model:
@@ -554,13 +555,10 @@ def tutorial_main():
                             )
                         else:
                             # Set default model for the provider
-                            if new_provider == "ollama":
-                                models = get_ollama_models()
-                                default_model = models[0] if models else "llama3.2"
-                            else:
-                                default_model = "gpt-4o-mini"
-
+                            default_model = _default_model_for(new_provider)
                             session.set_provider(new_provider, default_model)
+                            set_saved_provider(new_provider)
+                            set_saved_model(default_model)
                             ui.refresh()
                             print_success(
                                 f"Switched to {PROVIDERS[new_provider]['name']}"
@@ -611,7 +609,22 @@ def tutorial_main():
                     print_error(f"Failed to generate tutorial: {error}")
 
 
-def main():
+def _print_chat_goodbye(session: ChatSession) -> None:
+    """Print the closing token summary for chat mode."""
+    stats = session.get_token_stats()
+    messages = session.get_message_count()
+    console.print()
+    if stats["total_tokens"] > 0:
+        console.print(
+            f"[dim]{messages} messages • {stats['total_tokens']:,} tokens • "
+            f"${stats['total_cost']:.4f}[/]"
+        )
+    console.print()
+    console.print("[dim]Goodbye.[/]")
+    console.print()
+
+
+def main() -> None:
     """Main entry point for the CLI."""
     # Version flag
     if "--version" in sys.argv or "-v" in sys.argv:
@@ -629,12 +642,13 @@ def main():
     tutorial_main()
 
 
-def chat_main():
+def chat_main() -> None:
     """Entry point for chat mode."""
     load_dotenv()
     setup_readline()
 
-    session = ChatSession()
+    provider, model = _startup_provider_model()
+    session = ChatSession(model=model, provider=provider)
     ui = ChatUI(session)
 
     # Initial display
@@ -644,16 +658,7 @@ def chat_main():
         try:
             user_input = ui.get_input()
         except (KeyboardInterrupt, EOFError):
-            stats = session.get_token_stats()
-            stats["messages"] = session.get_message_count()
-            console.print()
-            if stats["total_tokens"] > 0:
-                console.print(
-                    f"[dim]{stats.get('messages', 0)} messages • {stats['total_tokens']:,} tokens • ${stats['total_cost']:.4f}[/]"
-                )
-            console.print()
-            console.print("[dim]Goodbye.[/]")
-            console.print()
+            _print_chat_goodbye(session)
             break
 
         if not user_input:
@@ -667,16 +672,7 @@ def chat_main():
 
             match command:
                 case "/quit" | "/exit" | "/q":
-                    stats = session.get_token_stats()
-                    stats["messages"] = session.get_message_count()
-                    console.print()
-                    if stats["total_tokens"] > 0:
-                        console.print(
-                            f"[dim]{stats.get('messages', 0)} messages • {stats['total_tokens']:,} tokens • ${stats['total_cost']:.4f}[/]"
-                        )
-                    console.print()
-                    console.print("[dim]Goodbye.[/]")
-                    console.print()
+                    _print_chat_goodbye(session)
                     break
 
                 case "/help":
@@ -700,11 +696,12 @@ def chat_main():
                     print_token_stats(stats)
 
                 case "/model":
-                    print_models(session.model)
+                    print_models(session.model, session.provider)
                     new_model = Prompt.ask(
                         f"[{THEME['muted']}]Enter model name[/]", default=session.model
                     )
                     if session.set_model(new_model):
+                        set_saved_model(new_model)
                         print_success(f"Model changed to {new_model}")
                         ui.refresh()  # Refresh to show new model
                     else:
@@ -730,7 +727,13 @@ def chat_main():
                             f"[{THEME['muted']}]Filename[/]", default="conversation"
                         )
                     filepath = session.save_conversation(args)
-                    print_success(f"Saved to {filepath}")
+                    if filepath:
+                        print_success(f"Saved to {filepath}")
+                    else:
+                        print_error(
+                            "Invalid filename: must stay within the "
+                            "conversations directory."
+                        )
 
                 case "/load":
                     if not args:
@@ -747,7 +750,8 @@ def chat_main():
                         ui.refresh()
                         print_success(f"Loaded: {args}")
                         print_info(
-                            f"Model: {session.model} | Messages: {session.get_message_count()}"
+                            f"Model: {session.model} | "
+                            f"Messages: {session.get_message_count()}"
                         )
                     else:
                         print_error(f"Could not load: {args}")

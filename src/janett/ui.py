@@ -1,6 +1,7 @@
 """Terminal UI components for Janett."""
 
 import json
+from typing import Any
 
 from rich.console import Console
 from rich.markdown import Markdown
@@ -14,11 +15,12 @@ from janett.config import (
     THEME,
     get_ollama_models,
 )
+from janett.tutorial import Chapter, Tutorial
 
 console = Console()
 
 
-def print_help():
+def print_help() -> None:
     """Print help information with minimal styling."""
     console.print()
     console.print("[bold]Commands[/]")
@@ -43,24 +45,40 @@ def print_help():
     console.print()
 
 
-def print_token_stats(stats: dict):
+def print_token_stats(stats: dict[str, Any]) -> None:
     """Print token usage statistics with minimal styling."""
     console.print()
     console.print(f"[bold]Token Usage[/] [dim]({stats['model']})[/]")
     console.print()
 
-    console.print(f"  [dim]Input[/]    {stats['input_tokens']:,} tokens  [dim](${stats['input_cost']:.4f})[/]")
-    console.print(f"  [dim]Output[/]   {stats['output_tokens']:,} tokens  [dim](${stats['output_cost']:.4f})[/]")
-    console.print(f"  [bold]Total[/]    {stats['total_tokens']:,} tokens  [bold {THEME['success']}](${stats['total_cost']:.4f})[/]")
+    console.print(
+        f"  [dim]Input[/]    {stats['input_tokens']:,} tokens  "
+        f"[dim](${stats['input_cost']:.4f})[/]"
+    )
+    console.print(
+        f"  [dim]Output[/]   {stats['output_tokens']:,} tokens  "
+        f"[dim](${stats['output_cost']:.4f})[/]"
+    )
+    console.print(
+        f"  [bold]Total[/]    {stats['total_tokens']:,} tokens  "
+        f"[bold {THEME['success']}](${stats['total_cost']:.4f})[/]"
+    )
 
-    context_pct = (stats['context_used'] / stats['context_limit']) * 100
-    context_style = THEME['success'] if context_pct < 50 else (THEME['warning'] if context_pct < 80 else THEME['error'])
+    context_pct = (stats["context_used"] / stats["context_limit"]) * 100
+    context_style = (
+        THEME["success"]
+        if context_pct < 50
+        else (THEME["warning"] if context_pct < 80 else THEME["error"])
+    )
     console.print()
-    console.print(f"  [dim]Context[/]  [{context_style}]{stats['context_used']:,} / {stats['context_limit']:,} ({context_pct:.1f}%)[/]")
+    console.print(
+        f"  [dim]Context[/]  [{context_style}]{stats['context_used']:,} / "
+        f"{stats['context_limit']:,} ({context_pct:.1f}%)[/]"
+    )
     console.print()
 
 
-def print_models(current_model: str, provider: str = "ollama"):
+def print_models(current_model: str, provider: str = "ollama") -> None:
     """Print available models for the current provider."""
     console.print()
 
@@ -70,13 +88,16 @@ def print_models(current_model: str, provider: str = "ollama"):
             console.print("[bold]Models[/] [dim](Ollama)[/]")
             console.print()
             console.print(f"  [{THEME['error']}]No models found. Is Ollama running?[/]")
-            console.print(f"  [dim]Run: ollama pull llama3.2[/]")
+            console.print("  [dim]Run: ollama pull llama3.2[/]")
         else:
             console.print("[bold]Models[/] [dim](Ollama - Local)[/]")
             console.print()
             for model in models:
                 if model == current_model:
-                    console.print(f"  [bold {THEME['primary']}]{model}[/] [bold {THEME['success']}]*[/]")
+                    console.print(
+                        f"  [bold {THEME['primary']}]{model}[/] "
+                        f"[bold {THEME['success']}]*[/]"
+                    )
                 else:
                     console.print(f"  [dim]{model}[/]")
     else:
@@ -84,14 +105,21 @@ def print_models(current_model: str, provider: str = "ollama"):
         console.print()
         for model, info in OPENAI_MODELS.items():
             if model == current_model:
-                console.print(f"  [bold {THEME['primary']}]{model}[/] [dim]in:${info['input']:.2f} out:${info['output']:.2f}[/] [bold {THEME['success']}]*[/]")
+                console.print(
+                    f"  [bold {THEME['primary']}]{model}[/] "
+                    f"[dim]in:${info['input']:.2f} out:${info['output']:.2f}[/] "
+                    f"[bold {THEME['success']}]*[/]"
+                )
             else:
-                console.print(f"  [dim]{model}[/] [dim]in:${info['input']:.2f} out:${info['output']:.2f}[/]")
+                console.print(
+                    f"  [dim]{model}[/] "
+                    f"[dim]in:${info['input']:.2f} out:${info['output']:.2f}[/]"
+                )
 
     console.print()
 
 
-def print_providers(current_provider: str):
+def print_providers(current_provider: str) -> None:
     """Print available providers."""
     console.print()
     console.print("[bold]Providers[/]")
@@ -99,14 +127,17 @@ def print_providers(current_provider: str):
 
     for key, info in PROVIDERS.items():
         if key == current_provider:
-            console.print(f"  [bold {THEME['primary']}]{key}[/] [dim]{info['name']}[/] [bold {THEME['success']}]*[/]")
+            console.print(
+                f"  [bold {THEME['primary']}]{key}[/] [dim]{info['name']}[/] "
+                f"[bold {THEME['success']}]*[/]"
+            )
         else:
             console.print(f"  [dim]{key}[/] [dim]{info['name']}[/]")
 
     console.print()
 
 
-def list_saved_conversations():
+def list_saved_conversations() -> None:
     """List saved conversation files with minimal styling."""
     console.print()
 
@@ -129,31 +160,34 @@ def list_saved_conversations():
             saved_at = data.get("saved_at", "")[:16].replace("T", " ")
             msg_count = len(data.get("messages", []))
             model = data.get("model", "unknown")
-            console.print(f"  [bold]{filepath.stem}[/] [dim]{saved_at} • {msg_count} msgs • {model}[/]")
+            console.print(
+                f"  [bold]{filepath.stem}[/] "
+                f"[dim]{saved_at} • {msg_count} msgs • {model}[/]"
+            )
         except Exception:
             console.print(f"  [bold]{filepath.stem}[/] [red]Error loading[/]")
 
     console.print()
 
 
-def print_success(message: str):
+def print_success(message: str) -> None:
     """Print success message."""
     console.print(f"[{THEME['success']}]✓[/] {message}")
 
 
-def print_error(message: str):
+def print_error(message: str) -> None:
     """Print error message with minimal styling."""
     console.print()
     console.print(f"[{THEME['error']}]Error:[/] {message}")
     console.print()
 
 
-def print_info(message: str):
+def print_info(message: str) -> None:
     """Print info message."""
     console.print(f"[{THEME['muted']}]{message}[/]")
 
 
-def print_tutorial_help():
+def print_tutorial_help() -> None:
     """Print tutorial-specific help information."""
     console.print()
     console.print("[bold]Tutorial Commands[/]")
@@ -180,7 +214,7 @@ def print_tutorial_help():
     console.print()
 
 
-def print_chapter_list(tutorial, current_index: int):
+def print_chapter_list(tutorial: Tutorial, current_index: int) -> None:
     """Display a list of all chapters with the current one highlighted."""
     console.print()
     console.print(f"[bold]{tutorial.title}[/]")
@@ -195,7 +229,11 @@ def print_chapter_list(tutorial, current_index: int):
     for i, chapter in enumerate(tutorial.chapters):
         marker = "*" if i == current_index else " "
         style = f"bold {THEME['primary']}" if i == current_index else ""
-        summary = chapter.summary[:50] + "..." if len(chapter.summary) > 50 else chapter.summary
+        summary = (
+            chapter.summary[:50] + "..."
+            if len(chapter.summary) > 50
+            else chapter.summary
+        )
         table.add_row(
             f"{chapter.id}{marker}",
             f"[{style}]{chapter.title}[/]" if style else chapter.title,
@@ -204,11 +242,15 @@ def print_chapter_list(tutorial, current_index: int):
 
     console.print(table)
     console.print()
-    console.print(f"[dim]Current: Chapter {current_index + 1} of {len(tutorial.chapters)}[/]")
+    console.print(
+        f"[dim]Current: Chapter {current_index + 1} of {len(tutorial.chapters)}[/]"
+    )
     console.print()
 
 
-def print_chapter_content(chapter, chapter_index: int, total_chapters: int):
+def print_chapter_content(
+    chapter: Chapter, chapter_index: int, total_chapters: int
+) -> None:
     """Display the content of a single chapter."""
     console.print()
 
@@ -232,7 +274,7 @@ def print_chapter_content(chapter, chapter_index: int, total_chapters: int):
     console.print()
 
     # Navigation hints
-    nav_hints = []
+    nav_hints: list[str] = []
     if chapter_index > 0:
         nav_hints.append("/prev")
     if chapter_index < total_chapters - 1:
@@ -243,14 +285,16 @@ def print_chapter_content(chapter, chapter_index: int, total_chapters: int):
     console.print()
 
 
-def print_tutorial_welcome():
+def print_tutorial_welcome() -> None:
     """Print welcome message for tutorial mode."""
     console.print()
     console.print("[bold]Welcome to Janett Tutorials[/]")
     console.print()
     console.print("Enter a topic to generate a comprehensive tutorial.")
     console.print()
-    console.print(f"[dim]Examples: Python basics, REST APIs, Git workflow, React hooks[/]")
+    console.print(
+        "[dim]Examples: Python basics, REST APIs, Git workflow, React hooks[/]"
+    )
     console.print()
-    console.print(f"[dim]Type /help for commands[/]")
+    console.print("[dim]Type /help for commands[/]")
     console.print()
