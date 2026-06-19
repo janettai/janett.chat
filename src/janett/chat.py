@@ -2,9 +2,12 @@
 
 import json
 from datetime import datetime
+from pathlib import Path
+from typing import Any, cast
 
 import tiktoken
 from openai import OpenAI
+from openai.types.chat import ChatCompletionMessageParam
 from rich.console import Console
 from rich.live import Live
 from rich.markdown import Markdown
@@ -16,19 +19,49 @@ from janett.config import (
     DEFAULT_SYSTEM_PROMPT,
     PROVIDERS,
     SAVE_DIR,
+    get_model_pricing,
     get_openai_api_key,
 )
 
 console = Console()
 
 
-class TokenCounter:
-    """Count tokens for OpenAI models using tiktoken."""
+def stream_completion(
+    client: OpenAI,
+    model: str,
+    messages: list[dict[str, str]],
+    out_console: Console = console,
+) -> str:
+    """Stream a chat completion, rendering markdown live, and return the full text.
 
-    def __init__(self, model: str = DEFAULT_MODEL):
+    Shared by chat mode, the chat UI, and the in-tutorial chat loop so the
+    streaming/rendering logic lives in exactly one place.
+    """
+    stream = client.chat.completions.create(
+        model=model,
+        stream=True,
+        messages=cast(list[ChatCompletionMessageParam], messages),
+    )
+
+    full_response = ""
+    with Live(console=out_console, refresh_per_second=12, transient=False) as live:
+        for chunk in stream:
+            delta = chunk.choices[0].delta.content
+            if delta is not None:
+                full_response += delta
+                live.update(Markdown(full_response))
+
+    out_console.print()  # Add spacing after response
+    return full_response
+
+
+class TokenCounter:
+    """Approximate token counts using tiktoken (calibrated for OpenAI models)."""
+
+    def __init__(self, model: str = DEFAULT_MODEL) -> None:
         self.model = model
         try:
-            self.encoding = tiktoken.get_encoding(model)
+            self.encoding = tiktoken.encoding_for_model(model)
         except Exception:
             self.encoding = tiktoken.get_encoding("cl100k_base")
 
@@ -84,12 +117,13 @@ class ChatSession:
         self.total_output_tokens = 0
         self.client = client or create_client(provider)
 
-    def set_provider(self, provider: str, model: str | None = None):
+    def set_provider(self, provider: str, model: str | None = None) -> None:
         """Switch to a different provider."""
         self.provider = provider
         self.client = create_client(provider)
         if model:
             self.model = model
+            self.token_counter = TokenCounter(model)
 
     def add_user_msg(self, content: str) -> None:
         """Add a user message to the conversation."""
@@ -111,9 +145,11 @@ class ChatSession:
         self.clear_history()
 
     def set_model(self, model: str) -> bool:
-        """Change the model. Returns False if model is invalid."""
-        if model not in MODELS:
-            return False
+        """Change the model and refresh the token counter.
+
+        Any model name is accepted: Ollama models are discovered dynamically and
+        are not known ahead of time. Returns True (kept for caller compatibility).
+        """
         self.model = model
         self.token_counter = TokenCounter(model)
         return True
@@ -141,23 +177,7 @@ class ChatSession:
 
     def _stream_response(self) -> str:
         """Stream response with live updates - Claude Code style."""
-        stream = self.client.chat.completions.create(
-            model=self.model, stream=True, messages=self.messages
-        )
-
-        full_response = ""
-
-        with Live(console=console, refresh_per_second=12, transient=False) as live:
-            for chunk in stream:
-                if chunk.choices[0].delta.content is not None:
-                    token = chunk.choices[0].delta.content
-                    full_response += token
-
-                    # Minimal display - just markdown content
-                    md = Markdown(full_response)
-                    live.update(md)
-
-        console.print()  # Add spacing after response
+        full_response = stream_completion(self.client, self.model, self.messages)
         out_tokens = self.token_counter.count(full_response)
         self.total_output_tokens += out_tokens
         self.add_assistant_message(full_response)
@@ -166,7 +186,8 @@ class ChatSession:
     def _get_response_sync(self) -> str:
         """Get response without streaming."""
         response = self.client.chat.completions.create(
-            model=self.model, messages=self.messages
+            model=self.model,
+            messages=cast(list[ChatCompletionMessageParam], self.messages),
         )
 
         full_response = response.choices[0].message.content or ""
@@ -175,11 +196,21 @@ class ChatSession:
         self.add_assistant_message(full_response)
         return full_response
 
-    def get_token_stats(self) -> dict:
-        """Get token usage statistics."""
-        pricing = MODELS.get(self.model, MODELS[DEFAULT_MODEL])
-        input_cost = (self.total_input_tokens / 1_000_000) * pricing["input"]
-        output_cost = (self.total_output_tokens / 1_000_000) * pricing["output"]
+    def get_token_stats(self) -> dict[str, Any]:
+        """Get token usage statistics.
+
+        Costs are only meaningful for OpenAI; local providers (Ollama) are free,
+        so their dollar amounts are reported as zero rather than computed from a
+        placeholder price table.
+        """
+        pricing = get_model_pricing(self.model)
+        free = self.provider != "openai"
+        input_cost = (
+            0.0 if free else (self.total_input_tokens / 1_000_000) * pricing["input"]
+        )
+        output_cost = (
+            0.0 if free else (self.total_output_tokens / 1_000_000) * pricing["output"]
+        )
 
         return {
             "model": self.model,
@@ -193,13 +224,28 @@ class ChatSession:
             "context_limit": pricing["context"],
         }
 
-    def save_conversation(self, filename: str) -> str:
-        """Save conversation to a JSON file."""
+    def _resolve_save_path(self, filename: str) -> Path | None:
+        """Resolve ``filename`` inside SAVE_DIR, or None if it escapes the dir."""
+        candidate = SAVE_DIR / filename
+        if not candidate.suffix:
+            candidate = candidate.with_suffix(".json")
+
+        save_root = SAVE_DIR.resolve()
+        resolved = candidate.resolve()
+        if resolved != save_root and save_root not in resolved.parents:
+            return None
+        return resolved
+
+    def save_conversation(self, filename: str) -> str | None:
+        """Save conversation to a JSON file.
+
+        Returns the path written, or None if the filename escapes SAVE_DIR.
+        """
         SAVE_DIR.mkdir(exist_ok=True)
 
-        filepath = SAVE_DIR / filename
-        if not filepath.suffix:
-            filepath = filepath.with_suffix(".json")
+        filepath = self._resolve_save_path(filename)
+        if filepath is None:
+            return None
 
         data = {
             "model": self.model,
@@ -219,11 +265,8 @@ class ChatSession:
 
     def load_conversation(self, filename: str) -> bool:
         """Load conversation from a JSON file."""
-        filepath = SAVE_DIR / filename
-        if not filepath.suffix:
-            filepath = filepath.with_suffix(".json")
-
-        if not filepath.exists():
+        filepath = self._resolve_save_path(filename)
+        if filepath is None or not filepath.exists():
             return False
 
         with open(filepath) as f:

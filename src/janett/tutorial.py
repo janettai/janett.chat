@@ -3,9 +3,10 @@
 import json
 import re
 from dataclasses import dataclass, field
-from typing import Optional
+from typing import Any
 
 from openai import OpenAI
+from openai.types.chat import ChatCompletionMessageParam
 
 from janett.chat import create_client
 from janett.config import (
@@ -35,7 +36,7 @@ class Tutorial:
     chapters: list[Chapter] = field(default_factory=list)
 
     @classmethod
-    def from_json(cls, data: dict) -> "Tutorial":
+    def from_json(cls, data: dict[str, Any]) -> "Tutorial":
         """Create Tutorial from parsed JSON response."""
         chapters = [
             Chapter(
@@ -52,7 +53,7 @@ class Tutorial:
             chapters=chapters,
         )
 
-    def get_chapter(self, index: int) -> Optional[Chapter]:
+    def get_chapter(self, index: int) -> Chapter | None:
         """Get chapter by 0-based index."""
         if 0 <= index < len(self.chapters):
             return self.chapters[index]
@@ -72,14 +73,15 @@ class TutorialSession:
         model: str = DEFAULT_MODEL,
         provider: str = DEFAULT_PROVIDER,
         client: OpenAI | None = None,
-    ):
+    ) -> None:
         self.model = model
         self.provider = provider
         self.client = client or create_client(provider)
-        self.tutorial: Optional[Tutorial] = None
+        self.tutorial: Tutorial | None = None
         self.current_chapter_index: int = 0
+        self.last_raw_response: str = ""
 
-    def set_provider(self, provider: str, model: str | None = None):
+    def set_provider(self, provider: str, model: str | None = None) -> None:
         """Switch to a different provider."""
         self.provider = provider
         self.client = create_client(provider)
@@ -91,7 +93,7 @@ class TutorialSession:
 
         Returns (success, error_message).
         """
-        messages = [
+        messages: list[ChatCompletionMessageParam] = [
             {"role": "system", "content": TUTORIAL_SYSTEM_PROMPT},
             {"role": "user", "content": topic},
         ]
@@ -119,7 +121,7 @@ class TutorialSession:
         except Exception as e:
             return False, str(e)
 
-    def _parse_response(self, response: str) -> Optional[dict]:
+    def _parse_response(self, response: str) -> dict[str, Any] | None:
         """Parse AI response to extract tutorial data from structured format."""
         response = response.strip()
 
@@ -131,13 +133,13 @@ class TutorialSession:
         # Fallback: try JSON parsing for backwards compatibility
         return self._parse_json_format(response)
 
-    def _parse_structured_format(self, response: str) -> Optional[dict]:
+    def _parse_structured_format(self, response: str) -> dict[str, Any] | None:
         """Parse the ===TUTORIAL=== / ===CHAPTER=== format."""
         # Check if response has our markers
         if "===TUTORIAL===" not in response and "===CHAPTER" not in response:
             return None
 
-        result = {"title": "", "description": "", "chapters": []}
+        result: dict[str, Any] = {"title": "", "description": "", "chapters": []}
 
         # Extract tutorial title and description
         tutorial_match = re.search(
@@ -159,12 +161,14 @@ class TutorialSession:
             if content.endswith("---"):
                 content = content[:-3].strip()
 
-            result["chapters"].append({
-                "id": int(chapter_num),
-                "title": title.strip(),
-                "summary": summary.strip(),
-                "content": content,
-            })
+            result["chapters"].append(
+                {
+                    "id": int(chapter_num),
+                    "title": title.strip(),
+                    "summary": summary.strip(),
+                    "content": content,
+                }
+            )
 
         # If we found chapters, return the result
         if result["chapters"]:
@@ -175,12 +179,12 @@ class TutorialSession:
 
         return None
 
-    def _parse_json_format(self, response: str) -> Optional[dict]:
+    def _parse_json_format(self, response: str) -> dict[str, Any] | None:
         """Fallback JSON parser for backwards compatibility."""
         # Try direct JSON parse
         try:
             data = json.loads(response)
-            if "chapters" in data:
+            if isinstance(data, dict) and "chapters" in data:
                 return data
         except json.JSONDecodeError:
             pass
@@ -193,7 +197,7 @@ class TutorialSession:
             try:
                 json_str = response[first_brace : last_brace + 1]
                 data = json.loads(json_str)
-                if "chapters" in data:
+                if isinstance(data, dict) and "chapters" in data:
                     return data
             except json.JSONDecodeError:
                 pass
@@ -201,7 +205,7 @@ class TutorialSession:
         return None
 
     @property
-    def current_chapter(self) -> Optional[Chapter]:
+    def current_chapter(self) -> Chapter | None:
         """Get the current chapter."""
         if self.tutorial:
             return self.tutorial.get_chapter(self.current_chapter_index)
@@ -209,7 +213,10 @@ class TutorialSession:
 
     def next_chapter(self) -> bool:
         """Move to next chapter. Returns False if at end."""
-        if self.tutorial and self.current_chapter_index < self.tutorial.chapter_count - 1:
+        if (
+            self.tutorial
+            and self.current_chapter_index < self.tutorial.chapter_count - 1
+        ):
             self.current_chapter_index += 1
             return True
         return False
@@ -255,9 +262,12 @@ class TutorialSession:
             start_num=start_num,
         )
 
-        messages = [
+        messages: list[ChatCompletionMessageParam] = [
             {"role": "system", "content": system_prompt},
-            {"role": "user", "content": f"Continue the tutorial on: {self.tutorial.title}"},
+            {
+                "role": "user",
+                "content": f"Continue the tutorial on: {self.tutorial.title}",
+            },
         ]
 
         try:
@@ -287,7 +297,7 @@ class TutorialSession:
 
     def _parse_continuation(self, response: str, start_num: int) -> list[Chapter]:
         """Parse continuation response to extract new chapters."""
-        chapters = []
+        chapters: list[Chapter] = []
 
         # Extract chapters using the same pattern
         chapter_pattern = r"===CHAPTER\s*(\d+)===\s*\nTitle:\s*(.+?)\nSummary:\s*(.+?)\n---\s*\n([\s\S]*?)(?=\n---|\n===CHAPTER|\n===END===|$)"
@@ -298,16 +308,18 @@ class TutorialSession:
             if content.endswith("---"):
                 content = content[:-3].strip()
 
-            chapters.append(Chapter(
-                id=int(chapter_num),
-                title=title.strip(),
-                summary=summary.strip(),
-                content=content,
-            ))
+            chapters.append(
+                Chapter(
+                    id=int(chapter_num),
+                    title=title.strip(),
+                    summary=summary.strip(),
+                    content=content,
+                )
+            )
 
         return chapters
 
-    def reset(self):
+    def reset(self) -> None:
         """Reset the tutorial session."""
         self.tutorial = None
         self.current_chapter_index = 0

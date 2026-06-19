@@ -3,24 +3,25 @@
 import json
 import os
 from pathlib import Path
+from typing import Any
 
 import httpx
 
 # Theme colors - Claude Code inspired minimal palette
 THEME = {
-    "primary": "#D97706",      # Amber/Orange (Claude accent)
-    "secondary": "#A3A3A3",    # Neutral gray
-    "success": "#22C55E",      # Green
-    "warning": "#FBBF24",      # Yellow
-    "error": "#EF4444",        # Red
-    "muted": "#737373",        # Muted gray
-    "user": "#FFFFFF",         # White for user
-    "assistant": "#D97706",    # Claude amber
-    "dim": "#525252",          # Dim text
+    "primary": "#D97706",  # Amber/Orange (Claude accent)
+    "secondary": "#A3A3A3",  # Neutral gray
+    "success": "#22C55E",  # Green
+    "warning": "#FBBF24",  # Yellow
+    "error": "#EF4444",  # Red
+    "muted": "#737373",  # Muted gray
+    "user": "#FFFFFF",  # White for user
+    "assistant": "#D97706",  # Claude amber
+    "dim": "#525252",  # Dim text
 }
 
 # Provider configuration
-PROVIDERS = {
+PROVIDERS: dict[str, dict[str, str | None]] = {
     "ollama": {
         "base_url": "http://localhost:11434/v1",
         "api_key": "ollama",
@@ -34,29 +35,45 @@ PROVIDERS = {
 }
 
 # OpenAI models with pricing (per 1M tokens)
-OPENAI_MODELS = {
+OPENAI_MODELS: dict[str, dict[str, float]] = {
     "gpt-4o-mini": {"input": 0.15, "output": 0.60, "context": 128000},
     "gpt-4o": {"input": 5.00, "output": 15.00, "context": 128000},
     "gpt-4-turbo": {"input": 10.00, "output": 30.00, "context": 128000},
 }
+
+# Context limit assumed for models without published pricing (e.g. Ollama)
+DEFAULT_CONTEXT_LIMIT = 8192
+
+
+def get_model_pricing(model: str) -> dict[str, float]:
+    """Return ``{input, output, context}`` for a model.
+
+    OpenAI models use their published per-1M-token rates. Unknown models
+    (e.g. local Ollama models, which are free) default to zero cost.
+    """
+    if model in OPENAI_MODELS:
+        return OPENAI_MODELS[model]
+    return {"input": 0.0, "output": 0.0, "context": DEFAULT_CONTEXT_LIMIT}
+
 
 # Config file for persisting settings
 CONFIG_DIR = Path.home() / ".janett"
 CONFIG_FILE = CONFIG_DIR / "config.json"
 
 
-def load_config() -> dict:
+def load_config() -> dict[str, Any]:
     """Load configuration from file."""
     if CONFIG_FILE.exists():
         try:
             with open(CONFIG_FILE) as f:
-                return json.load(f)
+                data: dict[str, Any] = json.load(f)
+                return data
         except Exception:
             pass
     return {}
 
 
-def save_config(config: dict):
+def save_config(config: dict[str, Any]) -> None:
     """Save configuration to file."""
     CONFIG_DIR.mkdir(exist_ok=True)
     with open(CONFIG_FILE, "w") as f:
@@ -71,13 +88,40 @@ def get_openai_api_key() -> str | None:
         return env_key
     # Check config file
     config = load_config()
-    return config.get("openai_api_key")
+    key = config.get("openai_api_key")
+    return key if isinstance(key, str) else None
 
 
-def set_openai_api_key(api_key: str):
+def set_openai_api_key(api_key: str) -> None:
     """Save OpenAI API key to config file."""
     config = load_config()
     config["openai_api_key"] = api_key
+    save_config(config)
+
+
+def get_saved_provider() -> str:
+    """Get the persisted provider, falling back to the default."""
+    provider = load_config().get("provider")
+    return provider if provider in PROVIDERS else DEFAULT_PROVIDER
+
+
+def set_saved_provider(provider: str) -> None:
+    """Persist the selected provider."""
+    config = load_config()
+    config["provider"] = provider
+    save_config(config)
+
+
+def get_saved_model() -> str | None:
+    """Get the persisted model, if any."""
+    model = load_config().get("model")
+    return model if isinstance(model, str) else None
+
+
+def set_saved_model(model: str) -> None:
+    """Persist the selected model."""
+    config = load_config()
+    config["model"] = model
     save_config(config)
 
 
